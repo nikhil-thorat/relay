@@ -1,0 +1,6 @@
+targets:
+  - id: api_1
+    address: "localhost:9001"
+
+  - id: api_2
+    address: "localhost:9002"

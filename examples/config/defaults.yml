@@ -1,0 +1,14 @@
+server:
+  address: ":42069"
+
+strategy:
+  type: round_robin
+
+health:
+  enabled: false
+
+metrics:
+  enabled: false
+
+logging:
+  level: info

@@ -1,0 +1,26 @@
+server:
+  address: ":42069"
+
+strategy:
+  type: round_robin
+
+targets:
+  - id: api_1
+    address: "localhost:9001"
+    weight: 1
+
+  - id: api_2
+    address: "localhost:9002"
+    weight: 1
+
+health:
+  enabled: true
+  interval: 10
+  timeout: 5
+
+metrics:
+  enabled: true
+  address: ":9090"
+
+logging:
+  level: info
