@@ -1,0 +1,8 @@
+# Build artifacts
+bin/
+
+# Go test coverage
+coverage.out
+
+# Environment files
+.env
