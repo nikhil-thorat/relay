@@ -15,8 +15,8 @@ targets:
 
 health:
   enabled: true
-  interval: 10
-  timeout: 5
+  interval: "10s"
+  timeout: "5s"
 
 metrics:
   enabled: true

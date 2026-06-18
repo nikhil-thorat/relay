@@ -1,0 +1,6 @@
+strategy:
+  type: random
+
+targets:
+  - id: ""
+    address: ""
