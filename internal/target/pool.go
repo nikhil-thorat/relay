@@ -37,11 +37,42 @@ func (pool *Pool) Get(ID string) (*Target, error) {
 	return target, nil
 }
 
+func (pool *Pool) GetState(ID string) (*TargetState, error) {
+	state, ok := pool.States[ID]
+	if !ok {
+		return nil, errors.New("state not found")
+	}
+
+	return state, nil
+}
+
 func (pool *Pool) List() []*Target {
 	var targets []*Target
 
 	for _, target := range pool.Targets {
 		targets = append(targets, target)
+	}
+
+	return targets
+}
+
+func (pool *Pool) SetHealthy(ID string, healthy bool) error {
+	state, err := pool.GetState(ID)
+	if err != nil {
+		return err
+	}
+
+	state.Healthy = healthy
+	return nil
+}
+
+func (pool *Pool) Healthy() []*Target {
+	var targets []*Target
+
+	for _, target := range pool.Targets {
+		if pool.States[target.ID].Healthy {
+			targets = append(targets, target)
+		}
 	}
 
 	return targets

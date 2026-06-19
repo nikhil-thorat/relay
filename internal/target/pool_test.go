@@ -134,3 +134,115 @@ func TestStateCreatedOnAdd(t *testing.T) {
 	}
 
 }
+
+func TestGetState(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID:      "api_1",
+		Address: "localhost:9001",
+		Weight:  1,
+	})
+
+	state, err := pool.GetState("api_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if state == nil {
+		t.Fatal("expected state, got nil")
+	}
+
+}
+
+func TestGetStateMissing(t *testing.T) {
+	pool := NewPool()
+
+	_, err := pool.GetState("missing")
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+}
+
+func TestSetHealthyTrue(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID:      "api_1",
+		Address: "localhost:9001",
+		Weight:  1,
+	})
+
+	if err := pool.SetHealthy("api_1", true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	state, _ := pool.GetState("api_1")
+
+	if !state.Healthy {
+		t.Fatal("expected target to be healthy")
+	}
+
+}
+
+func TestSetHealthyFalse(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID:      "api_1",
+		Address: "localhost:9001",
+		Weight:  1,
+	})
+
+	_ = pool.SetHealthy("api_1", true)
+	_ = pool.SetHealthy("api_1", false)
+
+	state, _ := pool.GetState("api_1")
+
+	if state.Healthy {
+		t.Fatal("expected target to be unhealthy")
+	}
+
+}
+
+func TestHealthy(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID: "api_1",
+	})
+
+	_ = pool.Add(&Target{
+		ID: "api_2",
+	})
+
+	_ = pool.SetHealthy("api_1", true)
+
+	targets := pool.Healthy()
+
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 healthy target, got %d", len(targets))
+	}
+
+	if targets[0].ID != "api_1" {
+		t.Fatalf("expected api_1, got %s", targets[0].ID)
+	}
+
+}
+
+func TestHealthyEmpty(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID: "api_1",
+	})
+
+	targets := pool.Healthy()
+
+	if len(targets) != 0 {
+		t.Fatalf("expected 0 healthy targets, got %d", len(targets))
+	}
+
+}
