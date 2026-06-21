@@ -5,12 +5,15 @@ import "errors"
 type Pool struct {
 	Targets map[string]*Target
 	States  map[string]*TargetState
+
+	Order []string
 }
 
 func NewPool() *Pool {
 	return &Pool{
 		Targets: make(map[string]*Target),
 		States:  make(map[string]*TargetState),
+		Order:   make([]string, 0),
 	}
 }
 
@@ -24,6 +27,7 @@ func (pool *Pool) Add(target *Target) error {
 	pool.States[target.ID] = &TargetState{
 		Healthy: false,
 	}
+	pool.Order = append(pool.Order, target.ID)
 
 	return nil
 }
@@ -49,8 +53,8 @@ func (pool *Pool) GetState(ID string) (*TargetState, error) {
 func (pool *Pool) List() []*Target {
 	var targets []*Target
 
-	for _, target := range pool.Targets {
-		targets = append(targets, target)
+	for _, ID := range pool.Order {
+		targets = append(targets, pool.Targets[ID])
 	}
 
 	return targets
@@ -69,9 +73,9 @@ func (pool *Pool) SetHealthy(ID string, healthy bool) error {
 func (pool *Pool) Healthy() []*Target {
 	var targets []*Target
 
-	for _, target := range pool.Targets {
-		if pool.States[target.ID].Healthy {
-			targets = append(targets, target)
+	for _, ID := range pool.Order {
+		if pool.States[ID].Healthy {
+			targets = append(targets, pool.Targets[ID])
 		}
 	}
 

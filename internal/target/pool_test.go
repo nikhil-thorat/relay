@@ -246,3 +246,46 @@ func TestHealthyEmpty(t *testing.T) {
 	}
 
 }
+
+func TestListPreservesOrder(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID: "api_1",
+	})
+
+	_ = pool.Add(&Target{
+		ID: "api_2",
+	})
+
+	_ = pool.Add(&Target{
+		ID: "api_3",
+	})
+
+	targets := pool.List()
+
+	expected := []string{
+		"api_1",
+		"api_2",
+		"api_3",
+	}
+
+	if len(targets) != len(expected) {
+		t.Fatalf(
+			"expected %d targets, got %d",
+			len(expected),
+			len(targets),
+		)
+	}
+
+	for i, want := range expected {
+		if targets[i].ID != want {
+			t.Fatalf(
+				"expected %s at index %d, got %s",
+				want,
+				i,
+				targets[i].ID,
+			)
+		}
+	}
+}
