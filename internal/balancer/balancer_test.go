@@ -11,7 +11,7 @@ func TestNewBalancer(t *testing.T) {
 	pool := target.NewPool()
 	rr := &strategy.RoundRobin{}
 
-	balancer := NewBalancer(pool, rr)
+	balancer := New(pool, rr)
 
 	if balancer == nil {
 		t.Fatal("expected balancer, got nil")
@@ -30,7 +30,7 @@ func TestNextSingleHealthyTarget(t *testing.T) {
 	_ = pool.SetHealthy("api_1", true)
 
 	rr := &strategy.RoundRobin{}
-	balancer := NewBalancer(pool, rr)
+	balancer := New(pool, rr)
 
 	selected, err := balancer.Next()
 	if err != nil {
@@ -50,7 +50,7 @@ func TestNextNoHealthyTargets(t *testing.T) {
 	})
 
 	rr := &strategy.RoundRobin{}
-	balancer := NewBalancer(pool, rr)
+	balancer := New(pool, rr)
 
 	_, err := balancer.Next()
 
@@ -71,7 +71,7 @@ func TestRoundRobinIntegration(t *testing.T) {
 	_ = pool.SetHealthy("api_3", true)
 
 	rr := &strategy.RoundRobin{}
-	balancer := NewBalancer(pool, rr)
+	balancer := New(pool, rr)
 
 	expected := []string{
 		"api_1",

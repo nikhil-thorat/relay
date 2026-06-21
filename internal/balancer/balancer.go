@@ -10,7 +10,7 @@ type Balancer struct {
 	strategy strategy.Strategy
 }
 
-func NewBalancer(pool *target.Pool, strategy strategy.Strategy) *Balancer {
+func New(pool *target.Pool, strategy strategy.Strategy) *Balancer {
 	return &Balancer{
 		pool:     pool,
 		strategy: strategy,
