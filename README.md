@@ -29,7 +29,21 @@ The long-term goal is to provide a clean, modular, and extensible load balancing
 
 ## Status
 
-🚧 Under active development.
+🚧 Relay is currently under active development.
+
+Implemented:
+- Configuration loading and validation
+- Target pool management
+- Strategy abstraction
+- Round Robin load balancing
+- Balancer engine
+- Relay assembly
+
+Planned:
+- HTTP reverse proxy
+- Health checks
+- Prometheus metrics
+- Additional balancing strategies
 
 ## License
 
