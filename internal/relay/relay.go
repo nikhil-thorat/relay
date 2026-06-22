@@ -3,12 +3,14 @@ package relay
 import (
 	"github.com/nikhil-thorat/relay/internal/balancer"
 	"github.com/nikhil-thorat/relay/internal/config"
+	"github.com/nikhil-thorat/relay/internal/health"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
 
 type Relay struct {
 	Balancer *balancer.Balancer
+	Health   *health.Checker
 }
 
 func New(cfg *config.Config) (*Relay, error) {
@@ -32,7 +34,14 @@ func New(cfg *config.Config) (*Relay, error) {
 
 	balancer := balancer.New(pool, strat)
 
+	checker := health.New(
+		pool,
+		cfg.Health.Interval,
+		cfg.Health.Timeout,
+	)
+
 	return &Relay{
 		Balancer: balancer,
+		Health:   checker,
 	}, nil
 }
