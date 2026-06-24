@@ -38,12 +38,13 @@ Implemented:
 - Round Robin load balancing
 - Balancer engine
 - Relay assembly
-
-Planned:
 - HTTP reverse proxy
 - Health checks
 - Prometheus metrics
+
+Planned:
 - Additional balancing strategies
+- And much more...
 
 ## License
 
