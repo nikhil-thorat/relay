@@ -6,19 +6,25 @@ import (
 	"net/url"
 
 	"github.com/nikhil-thorat/relay/internal/balancer"
+	"github.com/nikhil-thorat/relay/internal/metrics"
 )
 
 type Proxy struct {
 	balancer *balancer.Balancer
+	metrics  *metrics.Metrics
 }
 
-func New(balancer *balancer.Balancer) *Proxy {
+func New(balancer *balancer.Balancer, metrics *metrics.Metrics) *Proxy {
 	return &Proxy{
 		balancer: balancer,
+		metrics:  metrics,
 	}
 }
 
 func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	proxy.metrics.IncrementRequests()
+
 	target, err := proxy.balancer.Next()
 	if err != nil {
 		http.Error(
@@ -26,8 +32,13 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"no available targets",
 			http.StatusBadGateway,
 		)
+		proxy.metrics.IncrementErrors()
 		return
 	}
+
+	proxy.metrics.IncrementTargetRequests(
+		target.ID,
+	)
 
 	targetUrl, err := url.Parse("http://" + target.Address)
 	if err != nil {
@@ -36,6 +47,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"invalid target url",
 			http.StatusBadGateway,
 		)
+		proxy.metrics.IncrementErrors()
 		return
 	}
 

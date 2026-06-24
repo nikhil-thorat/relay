@@ -7,10 +7,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/nikhil-thorat/relay/internal/balancer"
+	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
+
+func setupMetrics() *metrics.Metrics {
+	registry := prometheus.NewRegistry()
+
+	return metrics.New(registry)
+}
 
 func TestNew(t *testing.T) {
 	pool := target.NewPool()
@@ -18,12 +28,16 @@ func TestNew(t *testing.T) {
 
 	balancer := balancer.New(pool, rr)
 
-	proxy := New(balancer)
+	metrics := setupMetrics()
+
+	proxy := New(
+		balancer,
+		metrics,
+	)
 
 	if proxy == nil {
 		t.Fatal("expected proxy, got nil")
 	}
-
 }
 
 func TestServeHTTPWithNoTargets(t *testing.T) {
@@ -31,7 +45,13 @@ func TestServeHTTPWithNoTargets(t *testing.T) {
 	rr := &strategy.RoundRobin{}
 
 	balancer := balancer.New(pool, rr)
-	proxy := New(balancer)
+
+	metrics := setupMetrics()
+
+	proxy := New(
+		balancer,
+		metrics,
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -51,6 +71,27 @@ func TestServeHTTPWithNoTargets(t *testing.T) {
 		)
 	}
 
+	requests := testutil.ToFloat64(
+		metrics.RequestsTotal,
+	)
+
+	if requests != 1 {
+		t.Fatalf(
+			"expected 1 request, got %v",
+			requests,
+		)
+	}
+
+	errors := testutil.ToFloat64(
+		metrics.RequestErrorsTotal,
+	)
+
+	if errors != 1 {
+		t.Fatalf(
+			"expected 1 error, got %v",
+			errors,
+		)
+	}
 }
 
 func TestServeHTTPForwardsRequest(t *testing.T) {
@@ -60,6 +101,7 @@ func TestServeHTTPForwardsRequest(t *testing.T) {
 			r *http.Request,
 		) {
 			w.WriteHeader(http.StatusOK)
+
 			_, _ = w.Write(
 				[]byte("hello from backend"),
 			)
@@ -86,9 +128,15 @@ func TestServeHTTPForwardsRequest(t *testing.T) {
 	)
 
 	rr := &strategy.RoundRobin{}
+
 	balancer := balancer.New(pool, rr)
 
-	proxy := New(balancer)
+	metrics := setupMetrics()
+
+	proxy := New(
+		balancer,
+		metrics,
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -120,6 +168,40 @@ func TestServeHTTPForwardsRequest(t *testing.T) {
 		t.Fatalf(
 			"expected backend response, got %q",
 			string(body),
+		)
+	}
+
+	requests := testutil.ToFloat64(
+		metrics.RequestsTotal,
+	)
+
+	if requests != 1 {
+		t.Fatalf(
+			"expected 1 request, got %v",
+			requests,
+		)
+	}
+
+	targetRequests := testutil.ToFloat64(
+		metrics.TargetRequests.
+			WithLabelValues("api_1"),
+	)
+
+	if targetRequests != 1 {
+		t.Fatalf(
+			"expected 1 target request, got %v",
+			targetRequests,
+		)
+	}
+
+	errors := testutil.ToFloat64(
+		metrics.RequestErrorsTotal,
+	)
+
+	if errors != 0 {
+		t.Fatalf(
+			"expected 0 errors, got %v",
+			errors,
 		)
 	}
 }

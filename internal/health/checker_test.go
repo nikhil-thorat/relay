@@ -7,8 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
+
+func setupMetrics() *metrics.Metrics {
+	registry := prometheus.NewRegistry()
+
+	return metrics.New(
+		registry,
+	)
+}
 
 func TestCheckHealthy(t *testing.T) {
 	server := httptest.NewServer(
@@ -29,6 +41,7 @@ func TestCheckHealthy(t *testing.T) {
 
 	checker := New(
 		target.NewPool(),
+		setupMetrics(),
 		100*time.Millisecond,
 		1*time.Second,
 	)
@@ -45,6 +58,7 @@ func TestCheckHealthy(t *testing.T) {
 func TestCheckUnhealthy(t *testing.T) {
 	checker := New(
 		target.NewPool(),
+		setupMetrics(),
 		100*time.Millisecond,
 		1*time.Second,
 	)
@@ -82,8 +96,11 @@ func TestRunUpdatesState(t *testing.T) {
 		Address: address,
 	})
 
+	metrics := setupMetrics()
+
 	checker := New(
 		pool,
+		metrics,
 		100*time.Millisecond,
 		1*time.Second,
 	)
@@ -100,6 +117,17 @@ func TestRunUpdatesState(t *testing.T) {
 
 	if !state.Healthy {
 		t.Fatal("expected target to be healthy")
+	}
+
+	healthyTargets := testutil.ToFloat64(
+		metrics.HealthyTargets,
+	)
+
+	if healthyTargets != 1 {
+		t.Fatalf(
+			"expected 1 healthy target, got %v",
+			healthyTargets,
+		)
 	}
 }
 
@@ -127,8 +155,11 @@ func TestStart(t *testing.T) {
 		Address: address,
 	})
 
+	metrics := setupMetrics()
+
 	checker := New(
 		pool,
+		metrics,
 		100*time.Millisecond,
 		1*time.Second,
 	)
@@ -153,4 +184,14 @@ func TestStart(t *testing.T) {
 		)
 	}
 
+	healthyTargets := testutil.ToFloat64(
+		metrics.HealthyTargets,
+	)
+
+	if healthyTargets != 1 {
+		t.Fatalf(
+			"expected 1 healthy target, got %v",
+			healthyTargets,
+		)
+	}
 }

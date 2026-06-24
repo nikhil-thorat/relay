@@ -4,16 +4,19 @@ import (
 	"github.com/nikhil-thorat/relay/internal/balancer"
 	"github.com/nikhil-thorat/relay/internal/config"
 	"github.com/nikhil-thorat/relay/internal/health"
+	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Relay struct {
 	Balancer *balancer.Balancer
 	Health   *health.Checker
+	Metrics  *metrics.Metrics
 }
 
-func New(cfg *config.Config) (*Relay, error) {
+func New(cfg *config.Config, registry prometheus.Registerer) (*Relay, error) {
 	pool := target.NewPool()
 
 	for _, t := range cfg.Targets {
@@ -34,8 +37,13 @@ func New(cfg *config.Config) (*Relay, error) {
 
 	balancer := balancer.New(pool, strat)
 
+	metrics := metrics.New(
+		registry,
+	)
+
 	checker := health.New(
 		pool,
+		metrics,
 		cfg.Health.Interval,
 		cfg.Health.Timeout,
 	)
@@ -43,5 +51,6 @@ func New(cfg *config.Config) (*Relay, error) {
 	return &Relay{
 		Balancer: balancer,
 		Health:   checker,
+		Metrics:  metrics,
 	}, nil
 }

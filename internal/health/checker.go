@@ -4,18 +4,21 @@ import (
 	"net"
 	"time"
 
+	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
 
 type Checker struct {
 	pool     *target.Pool
+	metrics  *metrics.Metrics
 	interval time.Duration
 	timeout  time.Duration
 }
 
-func New(pool *target.Pool, interval time.Duration, timeout time.Duration) *Checker {
+func New(pool *target.Pool, metrics *metrics.Metrics, interval time.Duration, timeout time.Duration) *Checker {
 	return &Checker{
 		pool:     pool,
+		metrics:  metrics,
 		interval: interval,
 		timeout:  timeout,
 	}
@@ -45,6 +48,8 @@ func (checker *Checker) Run() {
 		healthy := checker.Check(target)
 		_ = checker.pool.SetHealthy(target.ID, healthy)
 	}
+
+	checker.metrics.SetHealthyTargets(len(checker.pool.Healthy()))
 }
 
 func (checker *Checker) Start() {
