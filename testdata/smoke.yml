@@ -1,0 +1,21 @@
+server:
+  address: ":18080"
+
+strategy:
+  type: round_robin
+
+targets:
+  - id: api_1
+    address: localhost:18081
+
+health:
+  enabled: true
+  interval: 1s
+  timeout: 1s
+
+metrics:
+  enabled: true
+  address: ":19090"
+
+logging:
+  level: info
