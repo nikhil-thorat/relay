@@ -15,8 +15,18 @@ func testRegistry() *prometheus.Registry {
 func TestNew(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		cfg := &config.Config{
+			Server: config.ServerConfig{
+				Address: ":8080",
+			},
 			Strategy: config.StrategyConfig{
 				Type: "round_robin",
+			},
+			Health: config.HealthConfig{
+				Enabled: true,
+			},
+			Metrics: config.MetricsConfig{
+				Enabled: true,
+				Address: ":9090",
 			},
 			Targets: []config.TargetConfig{
 				{
@@ -33,34 +43,43 @@ func TestNew(t *testing.T) {
 		)
 
 		if err != nil {
-			t.Fatalf(
-				"unexpected error: %v",
-				err,
-			)
+			t.Fatalf("unexpected error: %v", err)
 		}
 
 		if relay == nil {
-			t.Fatal(
-				"expected relay, got nil",
-			)
+			t.Fatal("expected relay, got nil")
 		}
 
 		if relay.Balancer == nil {
-			t.Fatal(
-				"expected balancer, got nil",
-			)
+			t.Fatal("expected balancer, got nil")
 		}
 
 		if relay.Health == nil {
-			t.Fatal(
-				"expected health checker, got nil",
-			)
+			t.Fatal("expected health checker, got nil")
 		}
 
 		if relay.Metrics == nil {
-			t.Fatal(
-				"expected metrics, got nil",
-			)
+			t.Fatal("expected metrics, got nil")
+		}
+
+		if relay.proxy == nil {
+			t.Fatal("expected proxy, got nil")
+		}
+
+		if relay.server == nil {
+			t.Fatal("expected http server, got nil")
+		}
+
+		if relay.metricsServer == nil {
+			t.Fatal("expected metrics server, got nil")
+		}
+
+		if !relay.healthEnabled {
+			t.Fatal("expected health to be enabled")
+		}
+
+		if !relay.metricsEnabled {
+			t.Fatal("expected metrics to be enabled")
 		}
 	})
 
@@ -77,14 +96,15 @@ func TestNew(t *testing.T) {
 		)
 
 		if err == nil {
-			t.Fatal(
-				"expected error",
-			)
+			t.Fatal("expected error")
 		}
 	})
 
 	t.Run("targets loaded into pool", func(t *testing.T) {
 		cfg := &config.Config{
+			Server: config.ServerConfig{
+				Address: ":8080",
+			},
 			Strategy: config.StrategyConfig{
 				Type: "round_robin",
 			},
@@ -92,12 +112,10 @@ func TestNew(t *testing.T) {
 				{
 					ID:      "api_1",
 					Address: "localhost:9001",
-					Weight:  1,
 				},
 				{
 					ID:      "api_2",
 					Address: "localhost:9002",
-					Weight:  1,
 				},
 			},
 		}
@@ -108,16 +126,11 @@ func TestNew(t *testing.T) {
 		)
 
 		if err != nil {
-			t.Fatalf(
-				"unexpected error: %v",
-				err,
-			)
+			t.Fatalf("unexpected error: %v", err)
 		}
 
 		if relay.Balancer == nil {
-			t.Fatal(
-				"expected balancer",
-			)
+			t.Fatal("expected balancer")
 		}
 	})
 }
@@ -127,10 +140,7 @@ func TestNewFromConfig(t *testing.T) {
 		"../../examples/config/explicit.yml",
 	)
 	if err != nil {
-		t.Fatalf(
-			"unexpected error: %v",
-			err,
-		)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	relay, err := New(
@@ -139,33 +149,34 @@ func TestNewFromConfig(t *testing.T) {
 	)
 
 	if err != nil {
-		t.Fatalf(
-			"unexpected error: %v",
-			err,
-		)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if relay == nil {
-		t.Fatal(
-			"expected relay, got nil",
-		)
+		t.Fatal("expected relay, got nil")
 	}
 
 	if relay.Balancer == nil {
-		t.Fatal(
-			"expected balancer, got nil",
-		)
+		t.Fatal("expected balancer, got nil")
 	}
 
 	if relay.Health == nil {
-		t.Fatal(
-			"expected health checker, got nil",
-		)
+		t.Fatal("expected health checker, got nil")
 	}
 
 	if relay.Metrics == nil {
-		t.Fatal(
-			"expected metrics, got nil",
-		)
+		t.Fatal("expected metrics, got nil")
+	}
+
+	if relay.proxy == nil {
+		t.Fatal("expected proxy, got nil")
+	}
+
+	if relay.server == nil {
+		t.Fatal("expected http server, got nil")
+	}
+
+	if relay.metricsServer == nil {
+		t.Fatal("expected metrics server, got nil")
 	}
 }

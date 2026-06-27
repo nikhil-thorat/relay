@@ -1,19 +1,29 @@
 package relay
 
 import (
+	"net/http"
+
 	"github.com/nikhil-thorat/relay/internal/balancer"
 	"github.com/nikhil-thorat/relay/internal/config"
 	"github.com/nikhil-thorat/relay/internal/health"
 	"github.com/nikhil-thorat/relay/internal/metrics"
+	"github.com/nikhil-thorat/relay/internal/proxy"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Relay struct {
 	Balancer *balancer.Balancer
 	Health   *health.Checker
 	Metrics  *metrics.Metrics
+
+	metricsEnabled bool
+	healthEnabled  bool
+	proxy          *proxy.Proxy
+	server         Server
+	metricsServer  Server
 }
 
 func New(cfg *config.Config, registry prometheus.Registerer) (*Relay, error) {
@@ -48,9 +58,65 @@ func New(cfg *config.Config, registry prometheus.Registerer) (*Relay, error) {
 		cfg.Health.Timeout,
 	)
 
+	proxy := proxy.New(balancer, metrics)
+
+	server := &http.Server{
+		Addr:    cfg.Server.Address,
+		Handler: proxy,
+	}
+
+	metricsServer := &http.Server{
+		Addr:    cfg.Metrics.Address,
+		Handler: promhttp.Handler(),
+	}
+
 	return &Relay{
-		Balancer: balancer,
-		Health:   checker,
-		Metrics:  metrics,
+		Balancer:       balancer,
+		Health:         checker,
+		Metrics:        metrics,
+		healthEnabled:  cfg.Health.Enabled,
+		metricsEnabled: cfg.Metrics.Enabled,
+		proxy:          proxy,
+		server:         server,
+		metricsServer:  metricsServer,
 	}, nil
+}
+
+func (relay *Relay) startHealth() {
+	if relay.healthEnabled && relay.Health != nil {
+		relay.Health.Start()
+	}
+}
+
+func (relay *Relay) startMetrics() {
+
+	if !relay.metricsEnabled || relay.metricsServer == nil {
+		return
+	}
+
+	go func() {
+		err := relay.metricsServer.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			// TODO: log error
+		}
+	}()
+}
+
+func (relay *Relay) startHTTP() error {
+	if relay.server == nil {
+		return nil
+	}
+
+	err := relay.server.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
+
+	return nil
+}
+
+func (relay *Relay) Start() error {
+	relay.startHealth()
+	relay.startMetrics()
+	return relay.startHTTP()
 }
