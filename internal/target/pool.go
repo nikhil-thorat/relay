@@ -1,8 +1,13 @@
 package target
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 type Pool struct {
+	mu sync.RWMutex
+
 	Targets map[string]*Target
 	States  map[string]*TargetState
 
@@ -18,6 +23,9 @@ func NewPool() *Pool {
 }
 
 func (pool *Pool) Add(target *Target) error {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
 	_, ok := pool.Targets[target.ID]
 	if ok {
 		return errors.New("target already exists")
@@ -33,6 +41,9 @@ func (pool *Pool) Add(target *Target) error {
 }
 
 func (pool *Pool) Get(ID string) (*Target, error) {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
 	target, ok := pool.Targets[ID]
 	if !ok {
 		return nil, errors.New("target not found")
@@ -41,17 +52,23 @@ func (pool *Pool) Get(ID string) (*Target, error) {
 	return target, nil
 }
 
-func (pool *Pool) GetState(ID string) (*TargetState, error) {
+func (pool *Pool) GetState(ID string) (TargetState, error) {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
 	state, ok := pool.States[ID]
 	if !ok {
-		return nil, errors.New("state not found")
+		return TargetState{}, errors.New("state not found")
 	}
 
-	return state, nil
+	return *state, nil
 }
 
 func (pool *Pool) List() []*Target {
-	var targets []*Target
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	targets := make([]*Target, 0, len(pool.Order))
 
 	for _, ID := range pool.Order {
 		targets = append(targets, pool.Targets[ID])
@@ -61,9 +78,12 @@ func (pool *Pool) List() []*Target {
 }
 
 func (pool *Pool) SetHealthy(ID string, healthy bool) error {
-	state, err := pool.GetState(ID)
-	if err != nil {
-		return err
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	state, ok := pool.States[ID]
+	if !ok {
+		return errors.New("state not found")
 	}
 
 	state.Healthy = healthy
@@ -71,7 +91,10 @@ func (pool *Pool) SetHealthy(ID string, healthy bool) error {
 }
 
 func (pool *Pool) Healthy() []*Target {
-	var targets []*Target
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	targets := make([]*Target, 0, len(pool.Order))
 
 	for _, ID := range pool.Order {
 		if pool.States[ID].Healthy {
