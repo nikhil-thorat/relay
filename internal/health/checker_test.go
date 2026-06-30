@@ -193,10 +193,8 @@ func TestStart(t *testing.T) {
 		)
 	}
 
-	// Stop the background goroutine.
 	cancel()
 
-	// Give it a moment to exit cleanly.
 	time.Sleep(
 		10 * time.Millisecond,
 	)
