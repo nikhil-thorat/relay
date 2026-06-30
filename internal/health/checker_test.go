@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,9 +18,7 @@ import (
 func setupMetrics() *metrics.Metrics {
 	registry := prometheus.NewRegistry()
 
-	return metrics.New(
-		registry,
-	)
+	return metrics.New(registry)
 }
 
 func TestCheckHealthy(t *testing.T) {
@@ -31,7 +30,6 @@ func TestCheckHealthy(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
-
 	defer server.Close()
 
 	address := strings.TrimPrefix(
@@ -81,7 +79,6 @@ func TestRunUpdatesState(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
-
 	defer server.Close()
 
 	address := strings.TrimPrefix(
@@ -109,10 +106,7 @@ func TestRunUpdatesState(t *testing.T) {
 
 	state, err := pool.GetState("api_1")
 	if err != nil {
-		t.Fatalf(
-			"unexpected error: %v",
-			err,
-		)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if !state.Healthy {
@@ -140,7 +134,6 @@ func TestStart(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
-
 	defer server.Close()
 
 	address := strings.TrimPrefix(
@@ -164,7 +157,12 @@ func TestStart(t *testing.T) {
 		1*time.Second,
 	)
 
-	checker.Start()
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
+	defer cancel()
+
+	checker.Start(ctx)
 
 	time.Sleep(
 		50 * time.Millisecond,
@@ -194,4 +192,12 @@ func TestStart(t *testing.T) {
 			healthyTargets,
 		)
 	}
+
+	// Stop the background goroutine.
+	cancel()
+
+	// Give it a moment to exit cleanly.
+	time.Sleep(
+		10 * time.Millisecond,
+	)
 }

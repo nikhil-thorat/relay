@@ -1,22 +1,32 @@
 package relay
 
-import "context"
+import (
+	"context"
+	"log"
+)
 
 type Server interface {
 	ListenAndServe() error
 	Shutdown(context.Context) error
 }
 
-func (r *Relay) Shutdown(ctx context.Context) error {
-	if err := r.server.Shutdown(ctx); err != nil {
+func (relay *Relay) Shutdown(ctx context.Context) error {
+	log.Println("Relay shutting down...")
+
+	relay.cancel()
+	err := relay.server.Shutdown(ctx)
+	if err != nil {
 		return err
 	}
 
-	if r.metricsEnabled {
-		if err := r.metricsServer.Shutdown(ctx); err != nil {
+	if relay.metricsEnabled {
+		err = relay.metricsServer.Shutdown(ctx)
+		if err != nil {
 			return err
 		}
 	}
+
+	log.Println("Relay shutdown complete...")
 
 	return nil
 }

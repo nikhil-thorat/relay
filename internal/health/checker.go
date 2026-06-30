@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -52,16 +53,20 @@ func (checker *Checker) Run() {
 	checker.metrics.SetHealthyTargets(len(checker.pool.Healthy()))
 }
 
-func (checker *Checker) Start() {
+func (checker *Checker) Start(ctx context.Context) {
 	checker.Run()
 
-	ticker := time.NewTicker(
-		checker.interval,
-	)
-
 	go func() {
-		for range ticker.C {
-			checker.Run()
+		ticker := time.NewTicker(checker.interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				checker.Run()
+			}
 		}
 	}()
 }

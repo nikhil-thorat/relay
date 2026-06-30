@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/nikhil-thorat/relay/internal/balancer"
@@ -24,9 +25,12 @@ type Relay struct {
 	proxy          *proxy.Proxy
 	server         Server
 	metricsServer  Server
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func New(cfg *config.Config, registry prometheus.Registerer) (*Relay, error) {
+func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 	pool := target.NewPool()
 
 	for _, t := range cfg.Targets {
@@ -66,9 +70,16 @@ func New(cfg *config.Config, registry prometheus.Registerer) (*Relay, error) {
 	}
 
 	metricsServer := &http.Server{
-		Addr:    cfg.Metrics.Address,
-		Handler: promhttp.Handler(),
+		Addr: cfg.Metrics.Address,
+		Handler: promhttp.HandlerFor(
+			registry,
+			promhttp.HandlerOpts{},
+		),
 	}
+
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
 
 	return &Relay{
 		Balancer:       balancer,
@@ -79,12 +90,14 @@ func New(cfg *config.Config, registry prometheus.Registerer) (*Relay, error) {
 		proxy:          proxy,
 		server:         server,
 		metricsServer:  metricsServer,
+		ctx:            ctx,
+		cancel:         cancel,
 	}, nil
 }
 
 func (relay *Relay) startHealth() {
 	if relay.healthEnabled && relay.Health != nil {
-		relay.Health.Start()
+		relay.Health.Start(relay.ctx)
 	}
 }
 
