@@ -2,7 +2,6 @@ package relay
 
 import (
 	"context"
-	"log"
 )
 
 type Server interface {
@@ -11,22 +10,25 @@ type Server interface {
 }
 
 func (relay *Relay) Shutdown(ctx context.Context) error {
-	log.Println("Relay shutting down...")
+
+	relay.Logger.Info("shutting down")
 
 	relay.cancel()
 	err := relay.server.Shutdown(ctx)
 	if err != nil {
+		relay.Logger.Error("server shutdown error", "error", err)
 		return err
 	}
 
 	if relay.metricsEnabled {
 		err = relay.metricsServer.Shutdown(ctx)
 		if err != nil {
+			relay.Logger.Error("metrics server shutdown error", "error", err)
 			return err
 		}
 	}
 
-	log.Println("Relay shutdown complete...")
+	relay.Logger.Info("relay shutdown complete...")
 
 	return nil
 }

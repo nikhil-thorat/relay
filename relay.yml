@@ -21,4 +21,4 @@ metrics:
   address: ":9090"
 
 logging:
-  level: info
+  level: error

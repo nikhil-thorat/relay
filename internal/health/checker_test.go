@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/nikhil-thorat/relay/internal/logging"
 	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
@@ -37,11 +38,14 @@ func TestCheckHealthy(t *testing.T) {
 		"http://",
 	)
 
+	logger, _ := logging.New("off")
+
 	checker := New(
 		target.NewPool(),
 		setupMetrics(),
 		100*time.Millisecond,
 		1*time.Second,
+		logger,
 	)
 
 	healthy := checker.Check(&target.Target{
@@ -54,11 +58,15 @@ func TestCheckHealthy(t *testing.T) {
 }
 
 func TestCheckUnhealthy(t *testing.T) {
+
+	logger, _ := logging.New("off")
+
 	checker := New(
 		target.NewPool(),
 		setupMetrics(),
 		100*time.Millisecond,
 		1*time.Second,
+		logger,
 	)
 
 	healthy := checker.Check(&target.Target{
@@ -95,11 +103,14 @@ func TestRunUpdatesState(t *testing.T) {
 
 	metrics := setupMetrics()
 
+	logger, _ := logging.New("off")
+
 	checker := New(
 		pool,
 		metrics,
 		100*time.Millisecond,
 		1*time.Second,
+		logger,
 	)
 
 	checker.Run()
@@ -150,11 +161,14 @@ func TestStart(t *testing.T) {
 
 	metrics := setupMetrics()
 
+	logger, _ := logging.New("off")
+
 	checker := New(
 		pool,
 		metrics,
 		100*time.Millisecond,
 		1*time.Second,
+		logger,
 	)
 
 	ctx, cancel := context.WithCancel(

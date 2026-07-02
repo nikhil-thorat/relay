@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/nikhil-thorat/relay/internal/balancer"
+	"github.com/nikhil-thorat/relay/internal/logging"
 	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
@@ -30,9 +31,12 @@ func TestNew(t *testing.T) {
 
 	metrics := setupMetrics()
 
+	logger, _ := logging.New("off")
+
 	proxy := New(
 		balancer,
 		metrics,
+		logger,
 	)
 
 	if proxy == nil {
@@ -48,9 +52,12 @@ func TestServeHTTPWithNoTargets(t *testing.T) {
 
 	metrics := setupMetrics()
 
+	logger, _ := logging.New("off")
+
 	proxy := New(
 		balancer,
 		metrics,
+		logger,
 	)
 
 	req := httptest.NewRequest(
@@ -133,9 +140,12 @@ func TestServeHTTPForwardsRequest(t *testing.T) {
 
 	metrics := setupMetrics()
 
+	logger, _ := logging.New("off")
+
 	proxy := New(
 		balancer,
 		metrics,
+		logger,
 	)
 
 	req := httptest.NewRequest(

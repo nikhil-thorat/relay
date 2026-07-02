@@ -7,6 +7,7 @@ import (
 	"github.com/nikhil-thorat/relay/internal/balancer"
 	"github.com/nikhil-thorat/relay/internal/config"
 	"github.com/nikhil-thorat/relay/internal/health"
+	"github.com/nikhil-thorat/relay/internal/logging"
 	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/proxy"
 	"github.com/nikhil-thorat/relay/internal/strategy"
@@ -19,6 +20,7 @@ type Relay struct {
 	Balancer *balancer.Balancer
 	Health   *health.Checker
 	Metrics  *metrics.Metrics
+	Logger   *logging.Logger
 
 	metricsEnabled bool
 	healthEnabled  bool
@@ -44,6 +46,11 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		}
 	}
 
+	logger, err := logging.New(cfg.Logging.Level)
+	if err != nil {
+		return nil, err
+	}
+
 	strat, err := strategy.New(cfg.Strategy.Type)
 	if err != nil {
 		return nil, err
@@ -60,9 +67,10 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		metrics,
 		cfg.Health.Interval,
 		cfg.Health.Timeout,
+		logger.WithComponent("health"),
 	)
 
-	proxy := proxy.New(balancer, metrics)
+	proxy := proxy.New(balancer, metrics, logger.WithComponent("proxy"))
 
 	server := &http.Server{
 		Addr:    cfg.Server.Address,
@@ -85,6 +93,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		Balancer:       balancer,
 		Health:         checker,
 		Metrics:        metrics,
+		Logger:         logger.WithComponent("relay"),
 		healthEnabled:  cfg.Health.Enabled,
 		metricsEnabled: cfg.Metrics.Enabled,
 		proxy:          proxy,
@@ -96,12 +105,17 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 }
 
 func (relay *Relay) startHealth() {
+
+	relay.Logger.Info("starting health checker")
+
 	if relay.healthEnabled && relay.Health != nil {
 		relay.Health.Start(relay.ctx)
 	}
 }
 
 func (relay *Relay) startMetrics() {
+
+	relay.Logger.Info("starting metrics server")
 
 	if !relay.metricsEnabled || relay.metricsServer == nil {
 		return
@@ -116,6 +130,9 @@ func (relay *Relay) startMetrics() {
 }
 
 func (relay *Relay) startHTTP() error {
+
+	relay.Logger.Info("starting http server")
+
 	if relay.server == nil {
 		return nil
 	}
@@ -129,6 +146,9 @@ func (relay *Relay) startHTTP() error {
 }
 
 func (relay *Relay) Start() error {
+
+	relay.Logger.Info("starting relay")
+
 	relay.startHealth()
 	relay.startMetrics()
 	return relay.startHTTP()
