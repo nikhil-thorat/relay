@@ -11,24 +11,37 @@ type Server interface {
 
 func (relay *Relay) Shutdown(ctx context.Context) error {
 
-	relay.Logger.Info("shutting down")
-
-	relay.cancel()
-	err := relay.server.Shutdown(ctx)
-	if err != nil {
-		relay.Logger.Error("server shutdown error", "error", err)
-		return err
+	if relay.Logger != nil {
+		relay.Logger.Info("shutting down")
 	}
 
-	if relay.metricsEnabled {
-		err = relay.metricsServer.Shutdown(ctx)
+	if relay.cancel != nil {
+		relay.cancel()
+	}
+
+	if relay.server != nil {
+		err := relay.server.Shutdown(ctx)
 		if err != nil {
-			relay.Logger.Error("metrics server shutdown error", "error", err)
+			if relay.Logger != nil {
+				relay.Logger.Error("server shutdown error", "error", err)
+			}
 			return err
 		}
 	}
 
-	relay.Logger.Info("relay shutdown complete...")
+	if relay.metricsEnabled && relay.metricsServer != nil {
+		err := relay.metricsServer.Shutdown(ctx)
+		if err != nil {
+			if relay.Logger != nil {
+				relay.Logger.Error("metrics server shutdown error", "error", err)
+			}
+			return err
+		}
+	}
+
+	if relay.Logger != nil {
+		relay.Logger.Info("relay shutdown complete...")
+	}
 
 	return nil
 }

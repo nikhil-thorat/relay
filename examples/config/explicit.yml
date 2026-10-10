@@ -1,5 +1,12 @@
 server:
   address: ":42069"
+  read_header_timeout: "5s"
+  read_timeout: "10s"
+  write_timeout: "10s"
+  idle_timeout: "60s"
+  shutdown_timeout: "5s"
+  max_inflight: 0
+  rate_limit_rps: 0
 
 strategy:
   type: round_robin
@@ -17,6 +24,8 @@ health:
   enabled: true
   interval: "10s"
   timeout: "5s"
+  mode: tcp
+  path: "/health"
 
 metrics:
   enabled: true
@@ -24,3 +33,6 @@ metrics:
 
 logging:
   level: info
+  format: text
+
+retry_attempts: 1

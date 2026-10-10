@@ -7,6 +7,7 @@ type Metrics struct {
 	RequestErrorsTotal prometheus.Counter
 	HealthyTargets     prometheus.Gauge
 	TargetRequests     *prometheus.CounterVec
+	RequestDuration    prometheus.Histogram
 }
 
 func New(registry prometheus.Registerer) *Metrics {
@@ -36,7 +37,15 @@ func New(registry prometheus.Registerer) *Metrics {
 			Name: "relay_target_requests_total",
 			Help: "Total requests routed to targets",
 		},
-		[]string{"target"},
+		[]string{"target", "code"},
+	)
+
+	requestDuration := prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "relay_request_duration_seconds",
+			Help:    "Request duration in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
 	)
 
 	registry.MustRegister(
@@ -44,6 +53,7 @@ func New(registry prometheus.Registerer) *Metrics {
 		requestErrorsTotal,
 		healthyTargets,
 		targetRequests,
+		requestDuration,
 	)
 
 	return &Metrics{
@@ -51,6 +61,7 @@ func New(registry prometheus.Registerer) *Metrics {
 		RequestErrorsTotal: requestErrorsTotal,
 		HealthyTargets:     healthyTargets,
 		TargetRequests:     targetRequests,
+		RequestDuration:    requestDuration,
 	}
 }
 
@@ -66,6 +77,10 @@ func (metrics *Metrics) SetHealthyTargets(count int) {
 	metrics.HealthyTargets.Set(float64(count))
 }
 
-func (metrics *Metrics) IncrementTargetRequests(targetID string) {
-	metrics.TargetRequests.WithLabelValues(targetID).Inc()
+func (metrics *Metrics) IncrementTargetRequests(targetID string, code string) {
+	metrics.TargetRequests.WithLabelValues(targetID, code).Inc()
+}
+
+func (metrics *Metrics) ObserveRequestDuration(seconds float64) {
+	metrics.RequestDuration.Observe(seconds)
 }

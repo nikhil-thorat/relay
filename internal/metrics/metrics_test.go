@@ -79,11 +79,11 @@ func TestIncrementTargetRequests(t *testing.T) {
 
 	metrics := New(registry)
 
-	metrics.IncrementTargetRequests("api_1")
+	metrics.IncrementTargetRequests("api_1", "200")
 
 	value := testutil.ToFloat64(
 		metrics.TargetRequests.
-			WithLabelValues("api_1"),
+			WithLabelValues("api_1", "200"),
 	)
 
 	if value != 1 {
@@ -91,5 +91,35 @@ func TestIncrementTargetRequests(t *testing.T) {
 			"expected 1, got %v",
 			value,
 		)
+	}
+}
+
+func TestTargetRequestsCodeLabel(t *testing.T) {
+	registry := prometheus.NewRegistry()
+
+	metrics := New(registry)
+
+	metrics.IncrementTargetRequests("api_1", "200")
+	metrics.IncrementTargetRequests("api_1", "502")
+
+	ok := testutil.ToFloat64(metrics.TargetRequests.WithLabelValues("api_1", "200"))
+	bad := testutil.ToFloat64(metrics.TargetRequests.WithLabelValues("api_1", "502"))
+
+	if ok != 1 || bad != 1 {
+		t.Fatalf("expected 1/1, got %v/%v", ok, bad)
+	}
+}
+
+func TestObserveRequestDuration(t *testing.T) {
+	registry := prometheus.NewRegistry()
+
+	metrics := New(registry)
+
+	metrics.ObserveRequestDuration(0.01)
+	metrics.ObserveRequestDuration(0.05)
+
+	count := testutil.CollectAndCount(metrics.RequestDuration)
+	if count == 0 {
+		t.Fatal("expected duration observations")
 	}
 }

@@ -11,6 +11,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
 				Strategy: StrategyConfig{
 					Type: "round_robin",
 				},
@@ -24,8 +27,55 @@ func TestValidate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid weighted strategy",
+			cfg: Config{
+				Server:   ServerConfig{Address: ":42069"},
+				Strategy: StrategyConfig{Type: "weighted_round_robin"},
+				Targets: []TargetConfig{
+					{ID: "api_1", Address: "localhost:9001"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid least_conn strategy",
+			cfg: Config{
+				Server:   ServerConfig{Address: ":42069"},
+				Strategy: StrategyConfig{Type: "least_conn"},
+				Targets: []TargetConfig{
+					{ID: "api_1", Address: "localhost:9001"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid least_response_time strategy",
+			cfg: Config{
+				Server:   ServerConfig{Address: ":42069"},
+				Strategy: StrategyConfig{Type: "least_response_time"},
+				Targets: []TargetConfig{
+					{ID: "api_1", Address: "localhost:9001"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid consistent_hash strategy",
+			cfg: Config{
+				Server:   ServerConfig{Address: ":42069"},
+				Strategy: StrategyConfig{Type: "consistent_hash"},
+				Targets: []TargetConfig{
+					{ID: "api_1", Address: "localhost:9001"},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "no targets",
 			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
 				Strategy: StrategyConfig{
 					Type: "round_robin",
 				},
@@ -35,6 +85,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "missing target id",
 			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
 				Strategy: StrategyConfig{
 					Type: "round_robin",
 				},
@@ -49,6 +102,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "missing target address",
 			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
 				Strategy: StrategyConfig{
 					Type: "round_robin",
 				},
@@ -63,6 +119,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "invalid strategy",
 			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
 				Strategy: StrategyConfig{
 					Type: "random",
 				},
@@ -78,6 +137,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "duplicate target ids",
 			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
 				Strategy: StrategyConfig{
 					Type: "round_robin",
 				},
@@ -90,6 +152,92 @@ func TestValidate(t *testing.T) {
 						ID:      "api_1",
 						Address: "localhost:9002",
 					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty server address",
+			cfg: Config{
+				Server: ServerConfig{
+					Address: "",
+				},
+				Strategy: StrategyConfig{
+					Type: "round_robin",
+				},
+				Targets: []TargetConfig{
+					{
+						ID:      "api_1",
+						Address: "localhost:9001",
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "metrics enabled without address",
+			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
+				Strategy: StrategyConfig{
+					Type: "round_robin",
+				},
+				Targets: []TargetConfig{
+					{
+						ID:      "api_1",
+						Address: "localhost:9001",
+					},
+				},
+				Metrics: MetricsConfig{
+					Enabled: true,
+					Address: "",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "health enabled with zero interval",
+			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
+				Strategy: StrategyConfig{
+					Type: "round_robin",
+				},
+				Targets: []TargetConfig{
+					{
+						ID:      "api_1",
+						Address: "localhost:9001",
+					},
+				},
+				Health: HealthConfig{
+					Enabled:  true,
+					Interval: 0,
+					Timeout:  1000000000,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "health enabled with zero timeout",
+			cfg: Config{
+				Server: ServerConfig{
+					Address: ":42069",
+				},
+				Strategy: StrategyConfig{
+					Type: "round_robin",
+				},
+				Targets: []TargetConfig{
+					{
+						ID:      "api_1",
+						Address: "localhost:9001",
+					},
+				},
+				Health: HealthConfig{
+					Enabled:  true,
+					Interval: 1000000000,
+					Timeout:  0,
 				},
 			},
 			wantErr: true,

@@ -1,0 +1,36 @@
+services:
+  api_1:
+    image: golang:1.26-alpine
+    working_dir: /app
+    volumes:
+      - ..:/app
+    command: ["go", "run", "./examples/backends", "-port", "9001", "-id", "api_1"]
+    expose:
+      - "9001"
+
+  api_2:
+    image: golang:1.26-alpine
+    working_dir: /app
+    volumes:
+      - ..:/app
+    command: ["go", "run", "./examples/backends", "-port", "9002", "-id", "api_2"]
+    expose:
+      - "9002"
+
+  relay:
+    build: ..
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    depends_on:
+      - api_1
+      - api_2
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - relay

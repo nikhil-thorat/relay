@@ -1,6 +1,7 @@
 package balancer
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/nikhil-thorat/relay/internal/strategy"
@@ -91,4 +92,34 @@ func TestRoundRobinIntegration(t *testing.T) {
 			t.Fatalf("expected %s, got %s", want, selected.ID)
 		}
 	}
+}
+
+func TestNextConcurrent(t *testing.T) {
+	pool := target.NewPool()
+
+	_ = pool.Add(&target.Target{ID: "api_1"})
+	_ = pool.Add(&target.Target{ID: "api_2"})
+	_ = pool.Add(&target.Target{ID: "api_3"})
+
+	_ = pool.SetHealthy("api_1", true)
+	_ = pool.SetHealthy("api_2", true)
+	_ = pool.SetHealthy("api_3", true)
+
+	rr := &strategy.RoundRobin{}
+	balancer := New(pool, rr)
+
+	var wg sync.WaitGroup
+
+	for range 20 {
+		wg.Go(func() {
+			for range 50 {
+				if _, err := balancer.Next(); err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+			}
+		})
+	}
+
+	wg.Wait()
 }

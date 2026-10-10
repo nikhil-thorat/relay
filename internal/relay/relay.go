@@ -27,12 +27,16 @@ type Relay struct {
 	proxy          *proxy.Proxy
 	server         Server
 	metricsServer  Server
+	pool           *target.Pool
+	configPath     string
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
 func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
+	cfg.ApplyDefaults()
+
 	pool := target.NewPool()
 
 	for _, t := range cfg.Targets {
@@ -46,7 +50,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		}
 	}
 
-	logger, err := logging.New(cfg.Logging.Level)
+	logger, err := logging.New(cfg.Logging.Level, cfg.Logging.Format)
 	if err != nil {
 		return nil, err
 	}
@@ -67,14 +71,23 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		metrics,
 		cfg.Health.Interval,
 		cfg.Health.Timeout,
+		cfg.Health.Mode,
+		cfg.Health.Path,
 		logger.WithComponent("health"),
 	)
 
-	proxy := proxy.New(balancer, metrics, logger.WithComponent("proxy"))
+	proxy := proxy.New(balancer, metrics, logger.WithComponent("proxy"), cfg.RetryAttempts)
+	proxy.SetLimits(cfg.Server.MaxInflight, cfg.Server.RateLimitRPS)
+
+	handler := buildHandler(pool, proxy)
 
 	server := &http.Server{
-		Addr:    cfg.Server.Address,
-		Handler: proxy,
+		Addr:              cfg.Server.Address,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
 	metricsServer := &http.Server{
@@ -83,6 +96,10 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 			registry,
 			promhttp.HandlerOpts{},
 		),
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
 	ctx, cancel := context.WithCancel(
@@ -99,6 +116,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		proxy:          proxy,
 		server:         server,
 		metricsServer:  metricsServer,
+		pool:           pool,
 		ctx:            ctx,
 		cancel:         cancel,
 	}, nil
@@ -106,7 +124,9 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 
 func (relay *Relay) startHealth() {
 
-	relay.Logger.Info("starting health checker")
+	if relay.Logger != nil {
+		relay.Logger.Info("starting health checker")
+	}
 
 	if relay.healthEnabled && relay.Health != nil {
 		relay.Health.Start(relay.ctx)
@@ -115,7 +135,9 @@ func (relay *Relay) startHealth() {
 
 func (relay *Relay) startMetrics() {
 
-	relay.Logger.Info("starting metrics server")
+	if relay.Logger != nil {
+		relay.Logger.Info("starting metrics server")
+	}
 
 	if !relay.metricsEnabled || relay.metricsServer == nil {
 		return
@@ -124,14 +146,18 @@ func (relay *Relay) startMetrics() {
 	go func() {
 		err := relay.metricsServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			// TODO: log error
+			if relay.Logger != nil {
+				relay.Logger.Error("metrics server failed", "error", err)
+			}
 		}
 	}()
 }
 
 func (relay *Relay) startHTTP() error {
 
-	relay.Logger.Info("starting http server")
+	if relay.Logger != nil {
+		relay.Logger.Info("starting http server")
+	}
 
 	if relay.server == nil {
 		return nil
@@ -147,7 +173,9 @@ func (relay *Relay) startHTTP() error {
 
 func (relay *Relay) Start() error {
 
-	relay.Logger.Info("starting relay")
+	if relay.Logger != nil {
+		relay.Logger.Info("starting relay")
+	}
 
 	relay.startHealth()
 	relay.startMetrics()

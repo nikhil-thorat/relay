@@ -11,7 +11,7 @@ type Logger struct {
 	*slog.Logger
 }
 
-func New(level string) (*Logger, error) {
+func New(level string, format string) (*Logger, error) {
 
 	var output io.Writer = os.Stdout
 	var logLevel slog.Level
@@ -29,17 +29,26 @@ func New(level string) (*Logger, error) {
 		output = io.Discard
 		logLevel = slog.LevelError
 	default:
-		return nil, fmt.Errorf("invalid log level : %s", level)
+		return nil, fmt.Errorf("invalid log level: %s", level)
+	}
+
+	if format == "" {
+		format = "text"
 	}
 
 	opts := &slog.HandlerOptions{
 		Level: logLevel,
 	}
 
-	handler := slog.NewTextHandler(
-		output,
-		opts,
-	)
+	var handler slog.Handler
+	switch format {
+	case "text":
+		handler = slog.NewTextHandler(output, opts)
+	case "json":
+		handler = slog.NewJSONHandler(output, opts)
+	default:
+		return nil, fmt.Errorf("invalid log format: %s", format)
+	}
 
 	logger := &Logger{
 		slog.New(handler),

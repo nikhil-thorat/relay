@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/nikhil-thorat/relay/internal/config"
 	"github.com/nikhil-thorat/relay/internal/relay"
@@ -27,20 +27,35 @@ func run() error {
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("load config %s: %w", *configPath, err)
 	}
 
 	registry := prometheus.NewRegistry()
 
 	relay, err := relay.New(cfg, registry)
 	if err != nil {
-		return err
+		return fmt.Errorf("create relay: %w", err)
 	}
+
+	log.Printf("loaded config %s, listening on %s, metrics %s", *configPath, cfg.Server.Address, cfg.Metrics.Address)
 
 	go func() {
 		err := relay.Start()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("Relay stopped : %v", err)
+		}
+	}()
+
+	hupCh := make(chan os.Signal, 1)
+	signal.Notify(hupCh, syscall.SIGHUP)
+	defer signal.Stop(hupCh)
+
+	go func() {
+		for range hupCh {
+			log.Printf("reloading config %s", *configPath)
+			if err := relay.Reload(*configPath); err != nil {
+				log.Printf("reload failed: %v", err)
+			}
 		}
 	}()
 
@@ -56,7 +71,7 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),
-		time.Second*5,
+		cfg.Server.ShutdownTimeout,
 	)
 	defer cancel()
 

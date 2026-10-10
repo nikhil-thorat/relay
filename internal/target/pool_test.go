@@ -1,6 +1,9 @@
 package target
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestNewPool(t *testing.T) {
 	pool := NewPool()
@@ -9,12 +12,12 @@ func TestNewPool(t *testing.T) {
 		t.Fatal("expected pool, got nil")
 	}
 
-	if pool.Targets == nil {
-		t.Fatal("targets map not initialized")
+	if len(pool.List()) != 0 {
+		t.Fatal("expected empty pool")
 	}
 
-	if pool.States == nil {
-		t.Fatal("states map not initialized")
+	if len(pool.Healthy()) != 0 {
+		t.Fatal("expected no healthy targets")
 	}
 }
 
@@ -31,12 +34,12 @@ func TestAdd(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(pool.Targets) != 1 {
-		t.Fatalf("expected 1 target, got %d", len(pool.Targets))
+	if len(pool.List()) != 1 {
+		t.Fatalf("expected 1 target, got %d", len(pool.List()))
 	}
 
-	if len(pool.States) != 1 {
-		t.Fatalf("expected 1 state, got %d", len(pool.States))
+	if _, err := pool.GetState("api_1"); err != nil {
+		t.Fatalf("expected state, got error: %v", err)
 	}
 
 }
@@ -123,14 +126,14 @@ func TestStateCreatedOnAdd(t *testing.T) {
 		Weight:  1,
 	})
 
-	state, ok := pool.States["api_1"]
+	state, err := pool.GetState("api_1")
 
-	if !ok {
+	if err != nil {
 		t.Fatal("expected state to be created")
 	}
 
-	if state == nil {
-		t.Fatal("expected state, got nil")
+	if state.Healthy {
+		t.Fatal("expected new target to be unhealthy")
 	}
 
 }
@@ -287,5 +290,130 @@ func TestListPreservesOrder(t *testing.T) {
 				targets[i].ID,
 			)
 		}
+	}
+}
+
+func TestAddNil(t *testing.T) {
+	pool := NewPool()
+
+	if err := pool.Add(nil); err == nil {
+		t.Fatal("expected error for nil target")
+	}
+}
+
+func TestGetReturnsCopy(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{
+		ID:      "api_1",
+		Address: "localhost:9001",
+		Weight:  1,
+	})
+
+	got, err := pool.Get("api_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got.Address = "mutated"
+
+	again, err := pool.Get("api_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if again.Address != "localhost:9001" {
+		t.Fatalf("expected copy, internal mutated to %q", again.Address)
+	}
+}
+
+func TestListReturnsCopies(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001"})
+
+	list := pool.List()
+	list[0].Address = "mutated"
+
+	again, _ := pool.Get("api_1")
+	if again.Address != "localhost:9001" {
+		t.Fatalf("expected copy, got %q", again.Address)
+	}
+}
+
+func TestRemove(t *testing.T) {
+	pool := NewPool()
+
+	_ = pool.Add(&Target{ID: "api_1"})
+	_ = pool.Add(&Target{ID: "api_2"})
+
+	if err := pool.Remove("api_1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pool.List()) != 1 {
+		t.Fatalf("expected 1 target, got %d", len(pool.List()))
+	}
+
+	if _, err := pool.Get("api_1"); err == nil {
+		t.Fatal("expected error for removed target")
+	}
+
+	if err := pool.Remove("missing"); err == nil {
+		t.Fatal("expected error for missing target")
+	}
+}
+
+func TestConcurrentAddGetHealthy(t *testing.T) {
+	pool := NewPool()
+
+	var wg sync.WaitGroup
+
+	for i := range 10 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			id := "api_" + string(rune('0'+i))
+			_ = pool.Add(&Target{ID: id, Address: "localhost:9001"})
+			_, _ = pool.Get(id)
+			_ = pool.SetHealthy(id, true)
+			_ = pool.List()
+			_ = pool.Healthy()
+		}(i)
+	}
+
+	wg.Wait()
+
+	if len(pool.Healthy()) != 10 {
+		t.Fatalf("expected 10 healthy, got %d", len(pool.Healthy()))
+	}
+}
+
+func TestFailureCounter(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001"})
+	_ = pool.SetHealthy("api_1", true)
+
+	_ = pool.RecordFailure("api_1")
+	_ = pool.RecordFailure("api_1")
+
+	state, _ := pool.GetState("api_1")
+	if state.ConsecutiveFailures != 2 {
+		t.Fatalf("expected 2 failures, got %d", state.ConsecutiveFailures)
+	}
+	if !state.Healthy {
+		t.Fatal("expected still healthy before threshold")
+	}
+
+	_ = pool.RecordFailure("api_1")
+	state, _ = pool.GetState("api_1")
+	if state.Healthy {
+		t.Fatal("expected unhealthy after 3 failures")
+	}
+
+	_ = pool.RecordSuccess("api_1")
+	state, _ = pool.GetState("api_1")
+	if state.ConsecutiveFailures != 0 {
+		t.Fatalf("expected reset, got %d", state.ConsecutiveFailures)
 	}
 }

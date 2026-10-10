@@ -14,6 +14,26 @@ func TestNew(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name:      "weighted round robin",
+			strategy:  "weighted_round_robin",
+			expectErr: false,
+		},
+		{
+			name:      "least conn",
+			strategy:  "least_conn",
+			expectErr: false,
+		},
+		{
+			name:      "least response time",
+			strategy:  "least_response_time",
+			expectErr: false,
+		},
+		{
+			name:      "consistent hash",
+			strategy:  "consistent_hash",
+			expectErr: false,
+		},
+		{
 			name:      "unknown strategy",
 			strategy:  "unknown",
 			expectErr: true,
