@@ -10,4 +10,5 @@ WORKDIR /app
 COPY --from=build /relay /app/relay
 COPY relay.yml /app/relay.yml
 EXPOSE 8080 9090
-ENTRYPOINT ["/app/relay", "-config", "/app/relay.yml"]
+ENTRYPOINT ["/app/relay"]
+CMD ["-config", "/app/relay.yml"]

@@ -17,14 +17,27 @@ services:
     expose:
       - "9002"
 
+  api_3:
+    image: golang:1.26-alpine
+    working_dir: /app
+    volumes:
+      - ..:/app
+    command: ["go", "run", "./examples/backends", "-port", "9003", "-id", "api_3"]
+    expose:
+      - "9003"
+
   relay:
     build: ..
     ports:
       - "8080:8080"
       - "9090:9090"
+    volumes:
+      - ./strategies:/configs:ro
+    command: ["-config", "${RELAY_CONFIG:-/configs/rr.yml}"]
     depends_on:
       - api_1
       - api_2
+      - api_3
 
   prometheus:
     image: prom/prometheus:v3.1.0
