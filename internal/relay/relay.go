@@ -66,6 +66,14 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		registry,
 	)
 
+	if !cfg.Health.Enabled {
+		for _, t := range pool.List() {
+			_ = pool.SetHealthy(t.ID, true)
+		}
+	}
+
+	metrics.SetHealthyTargets(len(pool.Healthy()))
+
 	checker := health.New(
 		pool,
 		metrics,

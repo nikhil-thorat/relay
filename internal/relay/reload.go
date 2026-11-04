@@ -39,6 +39,14 @@ func (relay *Relay) Reload(path string) error {
 		_ = relay.pool.Add(&t)
 	}
 
+	if !cfg.Health.Enabled {
+		for _, t := range relay.pool.List() {
+			_ = relay.pool.SetHealthy(t.ID, true)
+		}
+	}
+
+	relay.Metrics.SetHealthyTargets(len(relay.pool.Healthy()))
+
 	strat, err := strategy.New(cfg.Strategy.Type)
 	if err != nil {
 		return err

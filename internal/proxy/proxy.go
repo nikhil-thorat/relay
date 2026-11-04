@@ -10,7 +10,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/nikhil-thorat/relay/internal/balancer"
@@ -87,13 +86,6 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-func containsIP(prior string, ip string) bool {
-	if ip == "" {
-		return true
-	}
-	return strings.Contains(prior, ip)
-}
-
 func isTimeout(err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
@@ -131,17 +123,14 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	key := r.Header.Get("X-Request-ID")
+	if key == "" {
+		key = ip
+	}
+
 	id := requestID(r)
 	if id != "" {
 		r.Header.Set("X-Request-ID", id)
-	}
-
-	if prior := r.Header.Get("X-Forwarded-For"); prior != "" {
-		if !containsIP(prior, ip) {
-			r.Header.Set("X-Forwarded-For", prior+", "+ip)
-		}
-	} else if ip != "" {
-		r.Header.Set("X-Forwarded-For", ip)
 	}
 
 	attempts := 1
@@ -150,7 +139,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := 0; i < attempts; i++ {
-		target, err := proxy.balancer.NextForRequest(r)
+		target, err := proxy.balancer.NextForKey(key)
 		if err != nil {
 			http.Error(
 				w,
@@ -164,9 +153,6 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		proxy.balancer.Before(target)
-		attemptStart := time.Now()
-
 		targetURL, err := url.Parse("http://" + target.Address)
 		if err != nil {
 			http.Error(
@@ -179,6 +165,9 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			proxy.logger.Error("invalid target address", "request-id", id, "target", target.ID, "address", target.Address, "method", r.Method, "path", r.URL.Path, "error", err)
 			return
 		}
+
+		proxy.balancer.Before(target)
+		attemptStart := time.Now()
 
 		isLast := i == attempts-1
 

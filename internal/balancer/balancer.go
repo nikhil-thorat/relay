@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/nikhil-thorat/relay/internal/strategy"
@@ -30,16 +29,12 @@ func (balancer *Balancer) Next() (target.Target, error) {
 	)
 }
 
-func (balancer *Balancer) NextForRequest(r *http.Request) (target.Target, error) {
+func (balancer *Balancer) NextForKey(key string) (target.Target, error) {
 	healthy := balancer.pool.Healthy()
 
 	if keyed, ok := balancer.strategy.(interface {
 		SelectWithKey([]target.Target, string) (target.Target, error)
 	}); ok {
-		key := r.Header.Get("X-Request-ID")
-		if key == "" {
-			key = r.RemoteAddr
-		}
 		return keyed.SelectWithKey(healthy, key)
 	}
 

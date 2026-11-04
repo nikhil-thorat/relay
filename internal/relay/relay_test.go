@@ -180,3 +180,26 @@ func TestNewFromConfig(t *testing.T) {
 		t.Fatal("expected metrics server, got nil")
 	}
 }
+
+func TestHealthDisabledMarksTargetsHealthy(t *testing.T) {
+	cfg := &config.Config{
+		Server:   config.ServerConfig{Address: ":8080"},
+		Strategy: config.StrategyConfig{Type: "round_robin"},
+		Targets: []config.TargetConfig{
+			{ID: "api_1", Address: "localhost:9001"},
+			{ID: "api_2", Address: "localhost:9002"},
+		},
+		Health:  config.HealthConfig{Enabled: false},
+		Metrics: config.MetricsConfig{Enabled: false},
+		Logging: config.LoggingConfig{Level: "off"},
+	}
+
+	r, err := New(cfg, testRegistry())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(r.pool.Healthy()) != 2 {
+		t.Fatalf("expected 2 healthy targets, got %d", len(r.pool.Healthy()))
+	}
+}

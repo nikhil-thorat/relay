@@ -316,8 +316,51 @@ func TestHeadersForwarded(t *testing.T) {
 		t.Fatalf("expected request id passthrough, got %q", gotRequestID)
 	}
 
-	if !strings.Contains(gotForwarded, "1.2.3.4") {
-		t.Fatalf("expected X-Forwarded-For to contain client ip, got %q", gotForwarded)
+	if strings.Count(gotForwarded, "1.2.3.4") != 1 {
+		t.Fatalf("expected X-Forwarded-For to contain client ip once, got %q", gotForwarded)
+	}
+}
+
+func TestConsistentHashStickyThroughProxy(t *testing.T) {
+	first := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("first"))
+		}),
+	)
+	defer first.Close()
+
+	second := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("second"))
+		}),
+	)
+	defer second.Close()
+
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "first", Address: strings.TrimPrefix(first.URL, "http://")})
+	_ = pool.Add(&target.Target{ID: "second", Address: strings.TrimPrefix(second.URL, "http://")})
+	_ = pool.SetHealthy("first", true)
+	_ = pool.SetHealthy("second", true)
+
+	b := balancer.New(pool, &strategy.ConsistentHash{})
+	m := setupMetrics()
+	logger, _ := logging.New("off", "text")
+	p := New(b, m, logger, 0)
+
+	var body string
+	for range 5 {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "203.0.113.5:1234"
+		rec := httptest.NewRecorder()
+		p.ServeHTTP(rec, req)
+
+		if body == "" {
+			body = rec.Body.String()
+			continue
+		}
+		if rec.Body.String() != body {
+			t.Fatalf("expected sticky target %q, got %q", body, rec.Body.String())
+		}
 	}
 }
 
