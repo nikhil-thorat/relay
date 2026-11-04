@@ -153,3 +153,27 @@ func TestConcurrentSetStrategy(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestSelectForRequestExcludesTarget(t *testing.T) {
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "api_1", Address: "localhost:9001"})
+	_ = pool.Add(&target.Target{ID: "api_2", Address: "localhost:9002"})
+	_ = pool.SetHealthy("api_1", true)
+	_ = pool.SetHealthy("api_2", true)
+
+	b := New(pool, &strategy.ConsistentHash{})
+
+	first, err := b.SelectForRequest("key", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	second, err := b.SelectForRequest("key", map[string]struct{}{first.Target.ID: {}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if first.Target.ID == second.Target.ID {
+		t.Fatalf("expected a different target, got %s", second.Target.ID)
+	}
+}

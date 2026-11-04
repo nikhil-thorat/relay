@@ -619,3 +619,17 @@ func TestConcurrentSetLimits(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestIPLimiterEvictsIdleBuckets(t *testing.T) {
+	l := newIPLimiter(1)
+	l.Allow("old")
+	l.buckets["old"].last = time.Now().Add(-time.Hour)
+
+	for range sweepEvery {
+		l.Allow("new")
+	}
+
+	if _, ok := l.buckets["old"]; ok {
+		t.Fatal("expected idle bucket to be evicted")
+	}
+}

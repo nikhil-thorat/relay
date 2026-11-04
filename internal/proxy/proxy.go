@@ -117,6 +117,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if limiter != nil && !limiter.Allow(ip) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		proxy.metrics.IncrementErrors()
+		proxy.metrics.ObserveRequestDuration(time.Since(start).Seconds())
 		return
 	}
 
@@ -127,6 +128,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			proxy.metrics.IncrementErrors()
+			proxy.metrics.ObserveRequestDuration(time.Since(start).Seconds())
 			return
 		}
 	}
@@ -139,6 +141,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if id != "" {
 		r.Header.Set("X-Request-ID", id)
+		w.Header().Set("X-Request-ID", id)
 	}
 
 	attempts := 1
@@ -146,8 +149,14 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		attempts = proxy.retryAttempts + 1
 	}
 
+	attempted := make(map[string]struct{})
+
 	for i := 0; i < attempts; i++ {
-		selection, err := proxy.balancer.SelectForRequest(key, nil)
+		if r.Context().Err() != nil {
+			return
+		}
+
+		selection, err := proxy.balancer.SelectForRequest(key, attempted)
 		if err != nil {
 			http.Error(
 				w,
@@ -162,6 +171,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		target := selection.Target
+		attempted[target.ID] = struct{}{}
 
 		targetURL, err := url.Parse("http://" + target.Address)
 		if err != nil {

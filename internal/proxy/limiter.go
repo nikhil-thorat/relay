@@ -5,16 +5,22 @@ import (
 	"time"
 )
 
+const (
+	bucketTTL  = 10 * time.Minute
+	sweepEvery = 1024
+)
+
 type tokenBucket struct {
 	tokens float64
 	last   time.Time
 }
 
 type ipLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]*tokenBucket
-	rps     float64
-	burst   float64
+	mu       sync.Mutex
+	buckets  map[string]*tokenBucket
+	rps      float64
+	burst    float64
+	requests int
 }
 
 func newIPLimiter(rps int) *ipLimiter {
@@ -50,6 +56,15 @@ func (l *ipLimiter) Allow(ip string) bool {
 		b.tokens = l.burst
 	}
 	b.last = now
+
+	l.requests++
+	if l.requests%sweepEvery == 0 {
+		for key, bucket := range l.buckets {
+			if now.Sub(bucket.last) > bucketTTL {
+				delete(l.buckets, key)
+			}
+		}
+	}
 
 	if b.tokens < 1 {
 		return false
