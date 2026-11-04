@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/nikhil-thorat/relay/internal/balancer"
@@ -23,7 +24,7 @@ type Proxy struct {
 	logger        *logging.Logger
 	transport     *http.Transport
 	retryAttempts int
-	maxInflight   int
+	limitsMu      sync.RWMutex
 	inflight      chan struct{}
 	limiter       *ipLimiter
 }
@@ -56,7 +57,9 @@ func New(balancer *balancer.Balancer, metrics *metrics.Metrics, logger *logging.
 }
 
 func (proxy *Proxy) SetLimits(maxInflight int, rps int) {
-	proxy.maxInflight = maxInflight
+	proxy.limitsMu.Lock()
+	defer proxy.limitsMu.Unlock()
+
 	if maxInflight > 0 {
 		proxy.inflight = make(chan struct{}, maxInflight)
 	} else {
@@ -106,16 +109,21 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ip := clientIP(r)
 
-	if proxy.limiter != nil && !proxy.limiter.Allow(ip) {
+	proxy.limitsMu.RLock()
+	limiter := proxy.limiter
+	inflight := proxy.inflight
+	proxy.limitsMu.RUnlock()
+
+	if limiter != nil && !limiter.Allow(ip) {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		proxy.metrics.IncrementErrors()
 		return
 	}
 
-	if proxy.inflight != nil {
+	if inflight != nil {
 		select {
-		case proxy.inflight <- struct{}{}:
-			defer func() { <-proxy.inflight }()
+		case inflight <- struct{}{}:
+			defer func() { <-inflight }()
 		default:
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			proxy.metrics.IncrementErrors()
@@ -139,7 +147,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := 0; i < attempts; i++ {
-		target, err := proxy.balancer.NextForKey(key)
+		selection, err := proxy.balancer.SelectForRequest(key, nil)
 		if err != nil {
 			http.Error(
 				w,
@@ -152,6 +160,8 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
+
+		target := selection.Target
 
 		targetURL, err := url.Parse("http://" + target.Address)
 		if err != nil {
@@ -166,7 +176,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		proxy.balancer.Before(target)
+		selection.Before()
 		attemptStart := time.Now()
 
 		isLast := i == attempts-1
@@ -208,7 +218,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reverseProxy.ServeHTTP(rw, r)
 
 		attemptDuration := time.Since(attemptStart)
-		proxy.balancer.After(target, attemptDuration)
+		selection.After(attemptDuration)
 
 		if failed {
 			if !isLast {

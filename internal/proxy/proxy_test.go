@@ -576,3 +576,46 @@ func TestMaxInflightReturns429(t *testing.T) {
 		t.Fatalf("expected first 200, got %d", code)
 	}
 }
+
+func TestConcurrentSetLimits(t *testing.T) {
+	backend := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer backend.Close()
+
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "api_1", Address: strings.TrimPrefix(backend.URL, "http://")})
+	_ = pool.SetHealthy("api_1", true)
+
+	b := balancer.New(pool, &strategy.RoundRobin{})
+	m := setupMetrics()
+	logger, _ := logging.New("off", "text")
+	p := New(b, m, logger, 0)
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 100 {
+			p.SetLimits(1, 0)
+			p.SetLimits(0, 0)
+		}
+	})
+
+	for range 10 {
+		wg.Go(func() {
+			for range 20 {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				rec := httptest.NewRecorder()
+				p.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusOK && rec.Code != http.StatusTooManyRequests {
+					t.Errorf("unexpected status: %d", rec.Code)
+					return
+				}
+			}
+		})
+	}
+
+	wg.Wait()
+}

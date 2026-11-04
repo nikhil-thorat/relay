@@ -123,3 +123,33 @@ func TestNextConcurrent(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestConcurrentSetStrategy(t *testing.T) {
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "api_1", Address: "localhost:9001"})
+	_ = pool.Add(&target.Target{ID: "api_2", Address: "localhost:9002"})
+	_ = pool.SetHealthy("api_1", true)
+	_ = pool.SetHealthy("api_2", true)
+
+	b := New(pool, &strategy.RoundRobin{})
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 100 {
+			b.SetStrategy(&strategy.RoundRobin{})
+		}
+	})
+
+	for range 10 {
+		wg.Go(func() {
+			for range 100 {
+				if _, err := b.SelectForRequest("key", nil); err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+			}
+		})
+	}
+
+	wg.Wait()
+}
