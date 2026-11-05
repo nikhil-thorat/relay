@@ -97,6 +97,13 @@ func (selection Selection) After(d time.Duration) {
 	}
 }
 
+func (balancer *Balancer) PruneTargets() {
+	s := balancer.currentStrategy()
+	if pruner, ok := s.(interface{ Prune([]target.Target) }); ok {
+		pruner.Prune(balancer.pool.List())
+	}
+}
+
 func (balancer *Balancer) ReportFailure(ID string) {
 	_ = balancer.pool.RecordFailure(ID)
 }

@@ -58,3 +58,23 @@ func (w *WeightedRoundRobin) Select(targets []target.Target) (target.Target, err
 
 	return best, nil
 }
+
+func (w *WeightedRoundRobin) Prune(targets []target.Target) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.current == nil {
+		return
+	}
+
+	active := make(map[string]struct{}, len(targets))
+	for _, t := range targets {
+		active[t.ID] = struct{}{}
+	}
+
+	for id := range w.current {
+		if _, ok := active[id]; !ok {
+			delete(w.current, id)
+		}
+	}
+}

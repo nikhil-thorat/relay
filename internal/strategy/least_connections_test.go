@@ -40,6 +40,26 @@ func TestLeastConnSelectDistribution(t *testing.T) {
 	l.Done("api_1")
 }
 
+func TestLeastConnTieRotates(t *testing.T) {
+	l := &LeastConnections{}
+
+	targets := []target.Target{{ID: "api_1"}, {ID: "api_2"}}
+
+	first, err := l.Select(targets)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	second, err := l.Select(targets)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if first.ID == second.ID {
+		t.Fatalf("expected tie rotation, got %s twice", first.ID)
+	}
+}
+
 func TestLeastConnConcurrentSelect(t *testing.T) {
 	l := &LeastConnections{}
 
@@ -60,4 +80,20 @@ func TestLeastConnConcurrentSelect(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+func TestLeastConnPruneKeepsInFlightTarget(t *testing.T) {
+	l := &LeastConnections{}
+	l.Inc("old")
+
+	l.Prune([]target.Target{{ID: "new"}})
+	if _, ok := l.inflight["old"]; !ok {
+		t.Fatal("expected in-flight target to be retained")
+	}
+
+	l.Done("old")
+	l.Prune([]target.Target{{ID: "new"}})
+	if _, ok := l.inflight["old"]; ok {
+		t.Fatal("expected idle removed target to be pruned")
+	}
 }

@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 
@@ -53,6 +54,37 @@ func TestConsistentHashDistribution(t *testing.T) {
 
 	if len(seen) < 2 {
 		t.Fatal("expected distribution across both targets")
+	}
+}
+
+func TestConsistentHashRingStableOnAdd(t *testing.T) {
+	c := &ConsistentHash{}
+
+	base := []target.Target{{ID: "api_1"}, {ID: "api_2"}}
+	expanded := []target.Target{{ID: "api_1"}, {ID: "api_2"}, {ID: "api_3"}}
+
+	keys := make([]string, 200)
+	for i := range keys {
+		keys[i] = "key-" + strconv.Itoa(i)
+	}
+
+	before := make(map[string]string, len(keys))
+	for _, key := range keys {
+		s, err := c.SelectWithKey(base, key)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		before[key] = s.ID
+	}
+
+	for _, key := range keys {
+		s, err := c.SelectWithKey(expanded, key)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.ID != before[key] && s.ID != "api_3" {
+			t.Fatalf("key %s moved from %s to %s", key, before[key], s.ID)
+		}
 	}
 }
 

@@ -51,6 +51,7 @@ func (relay *Relay) Reload(path string) error {
 	if err != nil {
 		return err
 	}
+	relay.Balancer.PruneTargets()
 	relay.Balancer.SetStrategy(strat)
 
 	if relay.proxy != nil {
