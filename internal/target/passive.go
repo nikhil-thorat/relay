@@ -4,6 +4,13 @@ import "errors"
 
 const maxFailures = 3
 
+func (pool *Pool) SetPassiveRecovery(enabled bool) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pool.passiveRecovery = enabled
+}
+
 func (pool *Pool) RecordFailure(ID string) error {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
@@ -30,5 +37,8 @@ func (pool *Pool) RecordSuccess(ID string) error {
 	}
 
 	state.ConsecutiveFailures = 0
+	if pool.passiveRecovery {
+		state.Healthy = true
+	}
 	return nil
 }

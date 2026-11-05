@@ -417,3 +417,41 @@ func TestFailureCounter(t *testing.T) {
 		t.Fatalf("expected reset, got %d", state.ConsecutiveFailures)
 	}
 }
+
+func TestPassiveRecovery(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001"})
+	_ = pool.SetHealthy("api_1", true)
+	pool.SetPassiveRecovery(true)
+
+	for range maxFailures {
+		_ = pool.RecordFailure("api_1")
+	}
+
+	state, _ := pool.GetState("api_1")
+	if state.Healthy {
+		t.Fatal("expected target to be unhealthy")
+	}
+
+	_ = pool.RecordSuccess("api_1")
+	state, _ = pool.GetState("api_1")
+	if !state.Healthy {
+		t.Fatal("expected passive recovery")
+	}
+}
+
+func TestPassiveRecoveryDisabled(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001"})
+	_ = pool.SetHealthy("api_1", true)
+
+	for range maxFailures {
+		_ = pool.RecordFailure("api_1")
+	}
+
+	_ = pool.RecordSuccess("api_1")
+	state, _ := pool.GetState("api_1")
+	if state.Healthy {
+		t.Fatal("expected active health to remain authoritative")
+	}
+}

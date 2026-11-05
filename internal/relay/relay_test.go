@@ -203,3 +203,34 @@ func TestHealthDisabledMarksTargetsHealthy(t *testing.T) {
 		t.Fatalf("expected 2 healthy targets, got %d", len(r.pool.Healthy()))
 	}
 }
+
+func TestHealthDisabledEnablesPassiveRecovery(t *testing.T) {
+	cfg := &config.Config{
+		Server:   config.ServerConfig{Address: ":8080"},
+		Strategy: config.StrategyConfig{Type: "round_robin"},
+		Targets:  []config.TargetConfig{{ID: "api_1", Address: "localhost:9001"}},
+		Health:   config.HealthConfig{Enabled: false},
+		Metrics:  config.MetricsConfig{Enabled: false},
+		Logging:  config.LoggingConfig{Level: "off"},
+	}
+
+	r, err := New(cfg, testRegistry())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for range 3 {
+		r.Balancer.ReportFailure("api_1")
+	}
+
+	state, _ := r.pool.GetState("api_1")
+	if state.Healthy {
+		t.Fatal("expected target to become unhealthy")
+	}
+
+	r.Balancer.ReportSuccess("api_1")
+	state, _ = r.pool.GetState("api_1")
+	if !state.Healthy {
+		t.Fatal("expected passive recovery")
+	}
+}

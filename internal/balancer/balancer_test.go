@@ -4,6 +4,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
@@ -175,5 +179,30 @@ func TestSelectForRequestExcludesTarget(t *testing.T) {
 
 	if first.Target.ID == second.Target.ID {
 		t.Fatalf("expected a different target, got %s", second.Target.ID)
+	}
+}
+
+func TestReportFailureUpdatesHealthyGauge(t *testing.T) {
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "api_1", Address: "localhost:9001"})
+	_ = pool.SetHealthy("api_1", true)
+	pool.SetPassiveRecovery(true)
+
+	m := metrics.New(prometheus.NewRegistry())
+	b := New(pool, &strategy.RoundRobin{})
+	b.SetMetrics(m)
+
+	for range 3 {
+		b.ReportFailure("api_1")
+	}
+
+	if got := testutil.ToFloat64(m.HealthyTargets); got != 0 {
+		t.Fatalf("expected 0 healthy targets, got %v", got)
+	}
+
+	b.ReportSuccess("api_1")
+
+	if got := testutil.ToFloat64(m.HealthyTargets); got != 1 {
+		t.Fatalf("expected 1 healthy target, got %v", got)
 	}
 }

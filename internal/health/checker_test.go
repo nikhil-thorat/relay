@@ -318,3 +318,26 @@ func TestTransitionUpdatesGauge(t *testing.T) {
 		t.Fatalf("expected gauge 0 after unhealthy, got %v", v)
 	}
 }
+
+func TestHTTPDoesNotFollowRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/health", http.StatusFound)
+	}))
+	defer server.Close()
+
+	address := strings.TrimPrefix(server.URL, "http://")
+	logger, _ := logging.New("off", "text")
+	checker := New(target.NewPool(), setupMetrics(), 100*time.Millisecond, time.Second, "http", "/", logger)
+
+	if checker.Check(target.Target{Address: address}) {
+		t.Fatal("expected redirect to be unhealthy")
+	}
+}
+
+func TestRunWithoutMetricsOrLogger(t *testing.T) {
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "api_1", Address: "localhost:1"})
+	checker := New(pool, nil, 100*time.Millisecond, 50*time.Millisecond, "tcp", "/health", nil)
+
+	checker.Run()
+}

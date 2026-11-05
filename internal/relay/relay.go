@@ -38,6 +38,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 	cfg.ApplyDefaults()
 
 	pool := target.NewPool()
+	pool.SetPassiveRecovery(!cfg.Health.Enabled)
 
 	for _, t := range cfg.Targets {
 		err := pool.Add(&target.Target{
@@ -65,6 +66,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 	metrics := metrics.New(
 		registry,
 	)
+	balancer.SetMetrics(metrics)
 
 	if !cfg.Health.Enabled {
 		for _, t := range pool.List() {
@@ -72,7 +74,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		}
 	}
 
-	metrics.SetHealthyTargets(len(pool.Healthy()))
+	metrics.SetHealthyTargets(pool.HealthyCount())
 
 	checker := health.New(
 		pool,

@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nikhil-thorat/relay/internal/metrics"
 	"github.com/nikhil-thorat/relay/internal/strategy"
 	"github.com/nikhil-thorat/relay/internal/target"
 )
@@ -12,6 +13,7 @@ type Balancer struct {
 	mu       sync.RWMutex
 	pool     *target.Pool
 	strategy strategy.Strategy
+	metrics  *metrics.Metrics
 }
 
 type Selection struct {
@@ -29,6 +31,12 @@ func New(pool *target.Pool, strategy strategy.Strategy) *Balancer {
 func (balancer *Balancer) SetStrategy(s strategy.Strategy) {
 	balancer.mu.Lock()
 	balancer.strategy = s
+	balancer.mu.Unlock()
+}
+
+func (balancer *Balancer) SetMetrics(m *metrics.Metrics) {
+	balancer.mu.Lock()
+	balancer.metrics = m
 	balancer.mu.Unlock()
 }
 
@@ -106,8 +114,20 @@ func (balancer *Balancer) PruneTargets() {
 
 func (balancer *Balancer) ReportFailure(ID string) {
 	_ = balancer.pool.RecordFailure(ID)
+	balancer.updateHealthyTargets()
 }
 
 func (balancer *Balancer) ReportSuccess(ID string) {
 	_ = balancer.pool.RecordSuccess(ID)
+	balancer.updateHealthyTargets()
+}
+
+func (balancer *Balancer) updateHealthyTargets() {
+	balancer.mu.RLock()
+	m := balancer.metrics
+	balancer.mu.RUnlock()
+
+	if m != nil {
+		m.SetHealthyTargets(balancer.pool.HealthyCount())
+	}
 }

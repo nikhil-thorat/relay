@@ -12,7 +12,8 @@ type Pool struct {
 	targets map[string]Target
 	states  map[string]*TargetState
 
-	order []string
+	order           []string
+	passiveRecovery bool
 }
 
 func NewPool() *Pool {
@@ -136,6 +137,20 @@ func (pool *Pool) SetHealthy(ID string, healthy bool) error {
 		state.ConsecutiveFailures = 0
 	}
 	return nil
+}
+
+func (pool *Pool) HealthyCount() int {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	count := 0
+	for _, state := range pool.states {
+		if state.Healthy {
+			count++
+		}
+	}
+
+	return count
 }
 
 func (pool *Pool) Healthy() []Target {

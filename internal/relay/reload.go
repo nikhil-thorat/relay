@@ -18,6 +18,8 @@ func (relay *Relay) Reload(path string) error {
 		return fmt.Errorf("reload: pool not initialized")
 	}
 
+	relay.pool.SetPassiveRecovery(!cfg.Health.Enabled)
+
 	want := make(map[string]target.Target)
 	for _, t := range cfg.Targets {
 		want[t.ID] = target.Target{ID: t.ID, Address: t.Address, Weight: t.Weight}
@@ -45,7 +47,7 @@ func (relay *Relay) Reload(path string) error {
 		}
 	}
 
-	relay.Metrics.SetHealthyTargets(len(relay.pool.Healthy()))
+	relay.Metrics.SetHealthyTargets(relay.pool.HealthyCount())
 
 	strat, err := strategy.New(cfg.Strategy.Type)
 	if err != nil {

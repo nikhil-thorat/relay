@@ -20,6 +20,7 @@ type Checker struct {
 	mode     string
 	path     string
 	logger   *logging.Logger
+	client   *http.Client
 }
 
 func New(pool *target.Pool, metrics *metrics.Metrics, interval time.Duration, timeout time.Duration, mode string, path string, logger *logging.Logger) *Checker {
@@ -37,6 +38,12 @@ func New(pool *target.Pool, metrics *metrics.Metrics, interval time.Duration, ti
 		mode:     mode,
 		path:     path,
 		logger:   logger,
+		client: &http.Client{
+			Timeout: timeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -68,11 +75,7 @@ func (checker *Checker) checkTCP(t target.Target) bool {
 }
 
 func (checker *Checker) checkHTTP(t target.Target) bool {
-	client := &http.Client{
-		Timeout: checker.timeout,
-	}
-
-	resp, err := client.Get("http://" + t.Address + checker.path)
+	resp, err := checker.client.Get("http://" + t.Address + checker.path)
 	if err != nil {
 		return false
 	}
@@ -107,25 +110,33 @@ func (checker *Checker) Run() {
 				return
 			}
 
-			if !oldState.Healthy && newState.Healthy {
-				checker.logger.Info("target recovered", "target", t.ID)
-			}
+			if checker.logger != nil {
+				if !oldState.Healthy && newState.Healthy {
+					checker.logger.Info("target recovered", "target", t.ID)
+				}
 
-			if oldState.Healthy && !newState.Healthy {
-				checker.logger.Warn("target became unhealthy", "target", t.ID)
+				if oldState.Healthy && !newState.Healthy {
+					checker.logger.Warn("target became unhealthy", "target", t.ID)
+				}
 			}
 		}(t)
 	}
 
 	wg.Wait()
 
-	checker.metrics.SetHealthyTargets(len(checker.pool.Healthy()))
+	if checker.metrics != nil {
+		checker.metrics.SetHealthyTargets(checker.pool.HealthyCount())
+	}
 }
 
 func (checker *Checker) Start(ctx context.Context) {
-	checker.Run()
-
 	go func() {
+		checker.Run()
+
+		if checker.interval <= 0 {
+			return
+		}
+
 		ticker := time.NewTicker(checker.interval)
 		defer ticker.Stop()
 
