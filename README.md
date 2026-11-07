@@ -2,7 +2,7 @@
 
 Relay is a compact, health-aware HTTP load balancer written in Go. It routes traffic across backend targets, stops routing to unhealthy targets, retries safe requests, enforces per-IP and concurrency limits, exposes Prometheus metrics, and reloads routing configuration on `SIGHUP`.
 
-[Quick Start](#quick-start) | [Architecture](docs/architecture.md) | [Usage and Configuration](docs/usage.md) | [Testing](#testing)
+[Quick Start](#quick-start) | [Architecture](docs/architecture.md) | [Usage and Configuration](docs/usage.md) | [Testing](#testing) | [Benchmarks](docs/benchmarks.md)
 
 > **Status:** Active development. The current build covers the full single-node HTTP load balancer path, including health management, five balancing strategies, live reload, observability, and graceful shutdown.
 
@@ -232,6 +232,12 @@ The test suite covers:
 - Relay lifecycle tests for reload, health changes, shutdown, and target ordering
 - A chaos test that kills a backend while requests are in flight
 
+## Performance
+
+On a Ryzen 5 5600H laptop, with all services and k6 on the same host, Relay held 5600 requests per second with p50 `0.22 ms`, p95 `0.35 ms`, and p99 `0.68 ms`, with zero errors. Direct-to-backend traffic at the same rate measured p50 `0.11 ms` and p99 `0.26 ms`. Relay held 8000 requests per second with p99 `0.93 ms` and no dropped iterations; at 12000 offered requests per second it dropped load and p99 rose to `6.92 ms`.
+
+The full setup, per-strategy results, saturation steps, and Go microbenchmarks are in [docs/benchmarks.md](docs/benchmarks.md). Reproduce with `make bench`.
+
 ## Project Layout
 
 ```text
@@ -257,12 +263,13 @@ examples/           Backends, strategy configs, Docker Compose, load tests
 - Add admin authentication and safer operational defaults
 - Add dynamic service discovery
 - Add TCP and gRPC transports
-- Add benchmarks and reproducible load-test results
+- Expand benchmarks to multi-host and CI runs
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Usage and Configuration](docs/usage.md)
+- [Benchmarks](docs/benchmarks.md)
 - [Example configs](examples/config)
 - [Strategy examples](examples/strategies)
 

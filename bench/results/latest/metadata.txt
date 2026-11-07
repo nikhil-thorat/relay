@@ -1,0 +1,16 @@
+date=2026-11-07T21:07:06+05:30
+commit=922df8f8bbd93d138d350c014c4cd48e292f7349
+host=Vivobook_ASUSLaptop M6500QC_M6500QC
+cpu=AMD Ryzen 5 5600H with Radeon Graphics
+cores=12
+memory_kib=15743072
+os=Fedora Linux 44 (Forty Four)
+kernel=7.2.15-200.fc44.x86_64
+go=go version go1.26.10-X:nodwarf5 linux/amd64
+docker=Docker version 29.9.2, build 2.fc44
+compose=5.6.0
+k6=k6 v2.3.0 (commit/e088784614, go1.27.1, linux/amd64)
+governor=performance
+ac_online=1
+battery_status=Not charging
+battery_capacity=100
