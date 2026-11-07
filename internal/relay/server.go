@@ -26,6 +26,8 @@ func (relay *Relay) Shutdown(ctx context.Context) error {
 		relay.cancel()
 	}
 
+	relay.stopHealth()
+
 	var errs []error
 
 	if err := relay.shutdownServer(ctx, relay.server, "http server"); err != nil {

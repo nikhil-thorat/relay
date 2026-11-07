@@ -51,20 +51,20 @@ func New(pool *target.Pool, metrics *metrics.Metrics, interval time.Duration, ti
 func (checker *Checker) Check(
 	target target.Target,
 ) bool {
-
-	if checker.mode == "http" {
-		return checker.checkHTTP(target)
-	}
-
-	return checker.checkTCP(target)
+	return checker.check(context.Background(), target)
 }
 
-func (checker *Checker) checkTCP(t target.Target) bool {
-	conn, err := net.DialTimeout(
-		"tcp",
-		t.Address,
-		checker.timeout,
-	)
+func (checker *Checker) check(ctx context.Context, target target.Target) bool {
+	if checker.mode == "http" {
+		return checker.checkHTTP(ctx, target)
+	}
+
+	return checker.checkTCP(ctx, target)
+}
+
+func (checker *Checker) checkTCP(ctx context.Context, t target.Target) bool {
+	dialer := net.Dialer{Timeout: checker.timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", t.Address)
 
 	if err != nil {
 		return false
@@ -75,8 +75,18 @@ func (checker *Checker) checkTCP(t target.Target) bool {
 	return true
 }
 
-func (checker *Checker) checkHTTP(t target.Target) bool {
-	resp, err := checker.client.Get("http://" + t.Address + checker.path)
+func (checker *Checker) checkHTTP(ctx context.Context, t target.Target) bool {
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		"http://"+t.Address+checker.path,
+		nil,
+	)
+	if err != nil {
+		return false
+	}
+
+	resp, err := checker.client.Do(req)
 	if err != nil {
 		return false
 	}
@@ -86,6 +96,10 @@ func (checker *Checker) checkHTTP(t target.Target) bool {
 }
 
 func (checker *Checker) Run() {
+	checker.run(context.Background())
+}
+
+func (checker *Checker) run(ctx context.Context) {
 	targets := checker.pool.List()
 
 	var wg sync.WaitGroup
@@ -103,7 +117,7 @@ func (checker *Checker) Run() {
 				return
 			}
 
-			healthy := checker.Check(t)
+			healthy := checker.check(ctx, t)
 			if !checker.pool.SetHealthyForAddress(t.ID, t.Address, healthy) {
 				return
 			}
@@ -136,7 +150,7 @@ func (checker *Checker) Start(ctx context.Context) {
 
 	checker.wg.Go(func() {
 
-		checker.Run()
+		checker.run(ctx)
 
 		if checker.interval <= 0 {
 			return
@@ -150,7 +164,7 @@ func (checker *Checker) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				checker.Run()
+				checker.run(ctx)
 			}
 		}
 	})

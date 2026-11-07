@@ -361,3 +361,38 @@ func TestStartWait(t *testing.T) {
 		t.Fatal("wait did not return after cancel")
 	}
 }
+
+func TestCancelStopsInFlightCheck(t *testing.T) {
+	started := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{
+		ID:      "api_1",
+		Address: strings.TrimPrefix(server.URL, "http://"),
+	})
+
+	checker := New(pool, nil, time.Hour, 5*time.Second, "http", "/", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	checker.Start(ctx)
+	<-started
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		checker.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("in-flight check did not stop after cancel")
+	}
+}
