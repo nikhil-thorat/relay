@@ -68,3 +68,27 @@ func TestReadyz(t *testing.T) {
 		t.Fatalf("expected 200 when healthy, got %d", rec2.Code)
 	}
 }
+
+func TestAdminTargetsZeroLastChecked(t *testing.T) {
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "api_1", Address: "localhost:9001", Weight: 1})
+
+	h := buildHandler(pool, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/targets", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	var out []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(out) != 1 {
+		t.Fatalf("expected 1 target, got %d", len(out))
+	}
+
+	if out[0]["last_checked"] != "" {
+		t.Fatalf("expected empty last_checked, got %v", out[0]["last_checked"])
+	}
+}

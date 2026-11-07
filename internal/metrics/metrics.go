@@ -1,6 +1,10 @@
 package metrics
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"errors"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 type Metrics struct {
 	RequestsTotal      prometheus.Counter
@@ -48,13 +52,11 @@ func New(registry prometheus.Registerer) *Metrics {
 		},
 	)
 
-	registry.MustRegister(
-		requestsTotal,
-		requestErrorsTotal,
-		healthyTargets,
-		targetRequests,
-		requestDuration,
-	)
+	requestsTotal = register(registry, requestsTotal)
+	requestErrorsTotal = register(registry, requestErrorsTotal)
+	healthyTargets = register(registry, healthyTargets)
+	targetRequests = register(registry, targetRequests)
+	requestDuration = register(registry, requestDuration)
 
 	return &Metrics{
 		RequestsTotal:      requestsTotal,
@@ -83,4 +85,18 @@ func (metrics *Metrics) IncrementTargetRequests(targetID string, code string) {
 
 func (metrics *Metrics) ObserveRequestDuration(seconds float64) {
 	metrics.RequestDuration.Observe(seconds)
+}
+
+func register[T prometheus.Collector](registry prometheus.Registerer, collector T) T {
+	if err := registry.Register(collector); err != nil {
+		if already, ok := errors.AsType[prometheus.AlreadyRegisteredError](err); ok {
+			if existing, ok := already.ExistingCollector.(T); ok {
+				return existing
+			}
+		}
+
+		panic(err)
+	}
+
+	return collector
 }

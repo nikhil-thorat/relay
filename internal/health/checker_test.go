@@ -341,3 +341,23 @@ func TestRunWithoutMetricsOrLogger(t *testing.T) {
 
 	checker.Run()
 }
+
+func TestStartWait(t *testing.T) {
+	checker := New(target.NewPool(), nil, time.Hour, time.Second, "tcp", "/health", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	checker.Start(ctx)
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		checker.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("wait did not return after cancel")
+	}
+}

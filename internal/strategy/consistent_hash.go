@@ -56,7 +56,7 @@ func (c *ConsistentHash) buildRingLocked(targets []target.Target) {
 
 	for i, t := range targets {
 		c.ringIDs[i] = t.ID
-		for j := 0; j < virtualNodes; j++ {
+		for j := range virtualNodes {
 			c.ring = append(c.ring, hashNode{
 				hash: hashKey(t.ID + "#" + strconv.Itoa(j)),
 				id:   t.ID,

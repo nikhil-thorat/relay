@@ -633,3 +633,67 @@ func TestIPLimiterEvictsIdleBuckets(t *testing.T) {
 		t.Fatal("expected idle bucket to be evicted")
 	}
 }
+
+func TestSetRetryAttempts(t *testing.T) {
+	good := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+	defer good.Close()
+
+	pool := target.NewPool()
+	_ = pool.Add(&target.Target{ID: "bad", Address: "localhost:1"})
+	_ = pool.Add(&target.Target{ID: "good", Address: strings.TrimPrefix(good.URL, "http://")})
+	_ = pool.SetHealthy("bad", true)
+	_ = pool.SetHealthy("good", true)
+
+	b := balancer.New(pool, &strategy.RoundRobin{})
+	logger, _ := logging.New("off", "text")
+	p := New(b, setupMetrics(), logger, 0)
+	p.SetRetryAttempts(1)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected retry to succeed with 200, got %d", rec.Code)
+	}
+}
+
+func TestResponseWriterUnwrap(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rw := &responseWriter{ResponseWriter: rec}
+
+	if rw.Unwrap() != rec {
+		t.Fatal("expected wrapped response writer")
+	}
+}
+
+func TestSetLimitsPreservesUnchangedParts(t *testing.T) {
+	b := balancer.New(target.NewPool(), &strategy.RoundRobin{})
+	p := New(b, setupMetrics(), nil, 0)
+
+	p.SetLimits(2, 5)
+	firstInflight := p.inflight
+	firstLimiter := p.limiter
+
+	p.SetLimits(2, 6)
+	if p.inflight != firstInflight {
+		t.Fatal("expected inflight channel to be preserved")
+	}
+	if p.limiter == firstLimiter {
+		t.Fatal("expected limiter to be replaced")
+	}
+
+	secondLimiter := p.limiter
+
+	p.SetLimits(3, 6)
+	if p.inflight == firstInflight {
+		t.Fatal("expected inflight channel to be replaced")
+	}
+	if p.limiter != secondLimiter {
+		t.Fatal("expected limiter to be preserved")
+	}
+}

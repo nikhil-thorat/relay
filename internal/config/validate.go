@@ -2,6 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"strconv"
 )
 
 func (cfg *Config) Validate() error {
@@ -39,6 +42,16 @@ func (cfg *Config) Validate() error {
 			return errors.New("invalid target definition, ID or Address missing")
 		}
 
+		host, port, err := net.SplitHostPort(target.Address)
+		if err != nil || host == "" || port == "" {
+			return fmt.Errorf("invalid target address %q", target.Address)
+		}
+
+		portNumber, err := strconv.Atoi(port)
+		if err != nil || portNumber < 1 || portNumber > 65535 {
+			return fmt.Errorf("invalid target port in %q", target.Address)
+		}
+
 		if seen[target.ID] {
 			return errors.New("duplicate target id")
 		}
@@ -70,6 +83,10 @@ func (cfg *Config) Validate() error {
 
 	if cfg.Server.RateLimitRPS < 0 {
 		return errors.New("rate_limit_rps must not be negative")
+	}
+
+	if cfg.RetryAttempts != nil && *cfg.RetryAttempts < 0 {
+		return errors.New("retry_attempts must not be negative")
 	}
 
 	return nil

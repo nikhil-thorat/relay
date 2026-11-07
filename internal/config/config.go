@@ -48,5 +48,13 @@ type Config struct {
 	Health        HealthConfig   `yaml:"health"`
 	Metrics       MetricsConfig  `yaml:"metrics"`
 	Logging       LoggingConfig  `yaml:"logging"`
-	RetryAttempts int            `yaml:"retry_attempts"`
+	RetryAttempts *int           `yaml:"retry_attempts"`
+}
+
+func (cfg Config) RetryCount() int {
+	if cfg.RetryAttempts == nil {
+		return DefaultRetryAttempts
+	}
+
+	return *cfg.RetryAttempts
 }

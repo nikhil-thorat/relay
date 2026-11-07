@@ -26,7 +26,9 @@ type Proxy struct {
 	retryAttempts int
 	limitsMu      sync.RWMutex
 	inflight      chan struct{}
+	maxInflight   int
 	limiter       *ipLimiter
+	rateLimitRPS  int
 }
 
 func New(balancer *balancer.Balancer, metrics *metrics.Metrics, logger *logging.Logger, retryAttempts int) *Proxy {
@@ -60,12 +62,35 @@ func (proxy *Proxy) SetLimits(maxInflight int, rps int) {
 	proxy.limitsMu.Lock()
 	defer proxy.limitsMu.Unlock()
 
-	if maxInflight > 0 {
-		proxy.inflight = make(chan struct{}, maxInflight)
-	} else {
-		proxy.inflight = nil
+	if maxInflight != proxy.maxInflight {
+		if maxInflight > 0 {
+			proxy.inflight = make(chan struct{}, maxInflight)
+		} else {
+			proxy.inflight = nil
+		}
+		proxy.maxInflight = maxInflight
 	}
-	proxy.limiter = newIPLimiter(rps)
+
+	if rps != proxy.rateLimitRPS {
+		proxy.limiter = newIPLimiter(rps)
+		proxy.rateLimitRPS = rps
+	}
+}
+
+func (proxy *Proxy) SetRetryAttempts(attempts int) {
+	if attempts < 0 {
+		attempts = 0
+	}
+
+	proxy.limitsMu.Lock()
+	proxy.retryAttempts = attempts
+	proxy.limitsMu.Unlock()
+}
+
+func (proxy *Proxy) Close() {
+	if proxy.transport != nil {
+		proxy.transport.CloseIdleConnections()
+	}
 }
 
 func requestID(r *http.Request) string {
@@ -112,6 +137,7 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.limitsMu.RLock()
 	limiter := proxy.limiter
 	inflight := proxy.inflight
+	retryAttempts := proxy.retryAttempts
 	proxy.limitsMu.RUnlock()
 
 	if limiter != nil && !limiter.Allow(ip) {
@@ -145,8 +171,8 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	attempts := 1
-	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && proxy.retryAttempts > 0 {
-		attempts = proxy.retryAttempts + 1
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && retryAttempts > 0 {
+		attempts = retryAttempts + 1
 	}
 
 	attempted := make(map[string]struct{})

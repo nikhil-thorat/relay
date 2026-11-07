@@ -12,6 +12,9 @@ run:
 test:
 	go test -v ./...
 
+test-race:
+	go test -race ./...
+
 fmt:
 	go fmt ./...
 

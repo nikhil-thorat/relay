@@ -64,7 +64,8 @@ func (cfg *Config) ApplyDefaults() {
 		cfg.Health.Path = DefaultHealthPath
 	}
 
-	if cfg.RetryAttempts <= 0 {
-		cfg.RetryAttempts = DefaultRetryAttempts
+	if cfg.RetryAttempts == nil {
+		attempts := DefaultRetryAttempts
+		cfg.RetryAttempts = &attempts
 	}
 }

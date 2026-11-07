@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestLoad(t *testing.T) {
 	tests := []struct {
@@ -94,6 +98,61 @@ func TestLoadStrategyTypes(t *testing.T) {
 
 			if len(cfg.Targets) != 3 {
 				t.Fatalf("expected 3 targets, got %d", len(cfg.Targets))
+			}
+		})
+	}
+}
+
+func TestLoadRejectsUnknownFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "relay.yml")
+	content := "targets:\n  - id: api_1\n    address: localhost:9001\nunknown_field: true\n"
+
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected unknown field error")
+	}
+}
+
+func TestLoadRetryAttempts(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    int
+	}{
+		{
+			name:    "default",
+			content: "targets:\n  - id: api_1\n    address: localhost:9001\n",
+			want:    DefaultRetryAttempts,
+		},
+		{
+			name:    "explicit zero",
+			content: "targets:\n  - id: api_1\n    address: localhost:9001\nretry_attempts: 0\n",
+			want:    0,
+		},
+		{
+			name:    "explicit value",
+			content: "targets:\n  - id: api_1\n    address: localhost:9001\nretry_attempts: 3\n",
+			want:    3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "relay.yml")
+			if err := os.WriteFile(path, []byte(test.content), 0644); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got := cfg.RetryCount(); got != test.want {
+				t.Fatalf("expected %d, got %d", test.want, got)
 			}
 		})
 	}

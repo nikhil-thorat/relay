@@ -317,3 +317,205 @@ func TestReloadSwapsPool(t *testing.T) {
 		t.Fatalf("expected 2 targets after reload, got %d", len(r.pool.List()))
 	}
 }
+
+func TestReloadPreservesStrategyState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "relay.yml")
+	content := "server:\n  address: \":18083\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_1\n    address: localhost:9001\n  - id: api_2\n    address: localhost:9002\nhealth:\n  enabled: false\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	r, err := New(cfg, prometheus.NewRegistry())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	first, err := r.Balancer.SelectForRequest("", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := r.Reload(path); err != nil {
+		t.Fatalf("unexpected reload error: %v", err)
+	}
+
+	second, err := r.Balancer.SelectForRequest("", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if first.Target.ID == second.Target.ID {
+		t.Fatal("expected strategy state to be preserved across reload")
+	}
+}
+
+func TestReloadAddsTargetsInConfigOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "relay.yml")
+	first := "server:\n  address: \":18084\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_1\n    address: localhost:9001\nhealth:\n  enabled: false\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+	second := "server:\n  address: \":18084\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_3\n    address: localhost:9003\n  - id: api_1\n    address: localhost:9001\n  - id: api_2\n    address: localhost:9002\nhealth:\n  enabled: false\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+
+	if err := os.WriteFile(path, []byte(first), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	r, err := New(cfg, prometheus.NewRegistry())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := os.WriteFile(path, []byte(second), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := r.Reload(path); err != nil {
+		t.Fatalf("unexpected reload error: %v", err)
+	}
+
+	ids := make([]string, 0)
+	for _, target := range r.pool.List() {
+		ids = append(ids, target.ID)
+	}
+
+	expected := []string{"api_3", "api_1", "api_2"}
+	if len(ids) != len(expected) {
+		t.Fatalf("expected %v, got %v", expected, ids)
+	}
+
+	for i := range expected {
+		if ids[i] != expected[i] {
+			t.Fatalf("expected %v, got %v", expected, ids)
+		}
+	}
+}
+
+func TestReloadTogglesHealth(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "relay.yml")
+	disabled := "server:\n  address: \":18085\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_1\n    address: localhost:9001\nhealth:\n  enabled: false\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+	enabled := "server:\n  address: \":18085\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_1\n    address: localhost:9001\nhealth:\n  enabled: true\n  interval: 1s\n  timeout: 1s\n  mode: tcp\n  path: /health\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+
+	if err := os.WriteFile(path, []byte(disabled), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	r, err := New(cfg, prometheus.NewRegistry())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := os.WriteFile(path, []byte(enabled), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := r.Reload(path); err != nil {
+		t.Fatalf("unexpected reload error: %v", err)
+	}
+
+	if !r.healthEnabled {
+		t.Fatal("expected health enabled after reload")
+	}
+
+	if err := os.WriteFile(path, []byte(disabled), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := r.Reload(path); err != nil {
+		t.Fatalf("unexpected reload error: %v", err)
+	}
+
+	if r.healthEnabled {
+		t.Fatal("expected health disabled after reload")
+	}
+}
+
+func TestShutdownAttemptsBothServers(t *testing.T) {
+	mainServer := newMockServer()
+	mainServer.shutdownErr = errors.New("main shutdown failed")
+	metricsServer := newMockServer()
+
+	r := &Relay{
+		server:         mainServer,
+		metricsServer:  metricsServer,
+		metricsEnabled: true,
+		ctx:            context.Background(),
+	}
+
+	err := r.Shutdown(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if !errors.Is(err, mainServer.shutdownErr) {
+		t.Fatalf("expected %v, got %v", mainServer.shutdownErr, err)
+	}
+
+	if mainServer.shutdownCalls != 1 {
+		t.Fatalf("expected main server shutdown once, got %d", mainServer.shutdownCalls)
+	}
+
+	if metricsServer.shutdownCalls != 1 {
+		t.Fatalf("expected metrics server shutdown once, got %d", metricsServer.shutdownCalls)
+	}
+}
+
+func TestReloadAddressChangeResetsHealth(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "relay.yml")
+	first := "server:\n  address: \":18086\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_1\n    address: localhost:9001\nhealth:\n  enabled: true\n  interval: 1s\n  timeout: 1s\n  mode: tcp\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+	second := "server:\n  address: \":18086\"\nstrategy:\n  type: round_robin\ntargets:\n  - id: api_1\n    address: localhost:9002\nhealth:\n  enabled: true\n  interval: 1s\n  timeout: 1s\n  mode: tcp\nmetrics:\n  enabled: false\nlogging:\n  level: off\n"
+
+	if err := os.WriteFile(path, []byte(first), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	r, err := New(cfg, prometheus.NewRegistry())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_ = r.pool.SetHealthy("api_1", true)
+
+	if err := os.WriteFile(path, []byte(second), 0644); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := r.Reload(path); err != nil {
+		t.Fatalf("unexpected reload error: %v", err)
+	}
+
+	state, err := r.pool.GetState("api_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if state.Healthy {
+		t.Fatal("expected address change to mark target unhealthy")
+	}
+
+	if state.ConsecutiveFailures != 0 {
+		t.Fatalf("expected failures reset, got %d", state.ConsecutiveFailures)
+	}
+
+	if !state.LastChecked.IsZero() {
+		t.Fatal("expected last checked reset")
+	}
+}

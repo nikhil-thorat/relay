@@ -21,6 +21,7 @@ type Checker struct {
 	path     string
 	logger   *logging.Logger
 	client   *http.Client
+	wg       sync.WaitGroup
 }
 
 func New(pool *target.Pool, metrics *metrics.Metrics, interval time.Duration, timeout time.Duration, mode string, path string, logger *logging.Logger) *Checker {
@@ -103,7 +104,9 @@ func (checker *Checker) Run() {
 			}
 
 			healthy := checker.Check(t)
-			_ = checker.pool.SetHealthy(t.ID, healthy)
+			if !checker.pool.SetHealthyForAddress(t.ID, t.Address, healthy) {
+				return
+			}
 
 			newState, err := checker.pool.GetState(t.ID)
 			if err != nil {
@@ -130,7 +133,9 @@ func (checker *Checker) Run() {
 }
 
 func (checker *Checker) Start(ctx context.Context) {
-	go func() {
+
+	checker.wg.Go(func() {
+
 		checker.Run()
 
 		if checker.interval <= 0 {
@@ -148,5 +153,9 @@ func (checker *Checker) Start(ctx context.Context) {
 				checker.Run()
 			}
 		}
-	}()
+	})
+}
+
+func (checker *Checker) Wait() {
+	checker.wg.Wait()
 }

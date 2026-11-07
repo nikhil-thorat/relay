@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"github.com/nikhil-thorat/relay/internal/balancer"
 	"github.com/nikhil-thorat/relay/internal/config"
@@ -24,11 +25,17 @@ type Relay struct {
 
 	metricsEnabled bool
 	healthEnabled  bool
+	strategyType   string
 	proxy          *proxy.Proxy
 	server         Server
 	metricsServer  Server
 	pool           *target.Pool
-	configPath     string
+	cfg            config.Config
+
+	lifecycleMu  sync.Mutex
+	started      bool
+	healthCtx    context.Context
+	healthCancel context.CancelFunc
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -86,7 +93,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		logger.WithComponent("health"),
 	)
 
-	proxy := proxy.New(balancer, metrics, logger.WithComponent("proxy"), cfg.RetryAttempts)
+	proxy := proxy.New(balancer, metrics, logger.WithComponent("proxy"), cfg.RetryCount())
 	proxy.SetLimits(cfg.Server.MaxInflight, cfg.Server.RateLimitRPS)
 
 	handler := buildHandler(pool, proxy)
@@ -115,6 +122,7 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 	ctx, cancel := context.WithCancel(
 		context.Background(),
 	)
+	healthCtx, healthCancel := context.WithCancel(ctx)
 
 	return &Relay{
 		Balancer:       balancer,
@@ -123,23 +131,26 @@ func New(cfg *config.Config, registry *prometheus.Registry) (*Relay, error) {
 		Logger:         logger.WithComponent("relay"),
 		healthEnabled:  cfg.Health.Enabled,
 		metricsEnabled: cfg.Metrics.Enabled,
+		strategyType:   cfg.Strategy.Type,
 		proxy:          proxy,
 		server:         server,
 		metricsServer:  metricsServer,
 		pool:           pool,
+		cfg:            *cfg,
+		healthCtx:      healthCtx,
+		healthCancel:   healthCancel,
 		ctx:            ctx,
 		cancel:         cancel,
 	}, nil
 }
 
 func (relay *Relay) startHealth() {
-
 	if relay.Logger != nil {
 		relay.Logger.Info("starting health checker")
 	}
 
-	if relay.healthEnabled && relay.Health != nil {
-		relay.Health.Start(relay.ctx)
+	if relay.healthEnabled && relay.Health != nil && relay.healthCtx != nil {
+		relay.Health.Start(relay.healthCtx)
 	}
 }
 
@@ -182,12 +193,15 @@ func (relay *Relay) startHTTP() error {
 }
 
 func (relay *Relay) Start() error {
-
 	if relay.Logger != nil {
 		relay.Logger.Info("starting relay")
 	}
 
+	relay.lifecycleMu.Lock()
+	relay.started = true
 	relay.startHealth()
+	relay.lifecycleMu.Unlock()
+
 	relay.startMetrics()
 	return relay.startHTTP()
 }

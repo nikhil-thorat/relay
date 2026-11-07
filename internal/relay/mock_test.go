@@ -3,8 +3,10 @@ package relay
 import "context"
 
 type mockServer struct {
-	listenCalls int
-	listenErr   error
+	listenCalls   int
+	listenErr     error
+	shutdownCalls int
+	shutdownErr   error
 
 	called chan struct{}
 }
@@ -28,5 +30,6 @@ func (m *mockServer) ListenAndServe() error {
 }
 
 func (m *mockServer) Shutdown(context.Context) error {
-	return nil
+	m.shutdownCalls++
+	return m.shutdownErr
 }

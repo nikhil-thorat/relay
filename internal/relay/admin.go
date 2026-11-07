@@ -26,13 +26,18 @@ func adminTargetsHandler(pool *target.Pool) http.Handler {
 			if err != nil {
 				continue
 			}
+			lastChecked := ""
+			if !state.LastChecked.IsZero() {
+				lastChecked = state.LastChecked.Format("2006-01-02T15:04:05Z07:00")
+			}
+
 			out = append(out, targetStatus{
 				ID:                  t.ID,
 				Address:             t.Address,
 				Weight:              t.Weight,
 				Healthy:             state.Healthy,
 				ConsecutiveFailures: state.ConsecutiveFailures,
-				LastChecked:         state.LastChecked.Format("2006-01-02T15:04:05Z07:00"),
+				LastChecked:         lastChecked,
 			})
 		}
 

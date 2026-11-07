@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -39,11 +37,10 @@ func run() error {
 
 	log.Printf("loaded config %s, listening on %s, metrics %s", *configPath, cfg.Server.Address, cfg.Metrics.Address)
 
+	startErr := make(chan error, 1)
+
 	go func() {
-		err := relay.Start()
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Relay stopped : %v", err)
-		}
+		startErr <- relay.Start()
 	}()
 
 	hupCh := make(chan os.Signal, 1)
@@ -67,7 +64,21 @@ func run() error {
 
 	defer stop()
 
-	<-ctx.Done()
+	select {
+	case err := <-startErr:
+		if err != nil {
+			shutdownCtx, cancel := context.WithTimeout(
+				context.Background(),
+				cfg.Server.ShutdownTimeout,
+			)
+			defer cancel()
+
+			_ = relay.Shutdown(shutdownCtx)
+			return fmt.Errorf("relay stopped: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),

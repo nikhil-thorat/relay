@@ -123,3 +123,21 @@ func TestObserveRequestDuration(t *testing.T) {
 		t.Fatal("expected duration observations")
 	}
 }
+
+func TestNewReusesRegisteredCollectors(t *testing.T) {
+	registry := prometheus.NewRegistry()
+
+	first := New(registry)
+	second := New(registry)
+
+	second.IncrementRequests()
+	second.SetHealthyTargets(2)
+
+	if got := testutil.ToFloat64(first.RequestsTotal); got != 1 {
+		t.Fatalf("expected shared counter, got %v", got)
+	}
+
+	if got := testutil.ToFloat64(first.HealthyTargets); got != 2 {
+		t.Fatalf("expected shared gauge, got %v", got)
+	}
+}

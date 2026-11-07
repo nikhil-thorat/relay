@@ -455,3 +455,84 @@ func TestPassiveRecoveryDisabled(t *testing.T) {
 		t.Fatal("expected active health to remain authoritative")
 	}
 }
+
+func TestUpdateAddressResetsState(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001", Weight: 1})
+	_ = pool.SetHealthy("api_1", true)
+	_ = pool.RecordFailure("api_1")
+
+	_ = pool.Update(&Target{ID: "api_1", Address: "localhost:9002", Weight: 1})
+
+	state, err := pool.GetState("api_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if state.Healthy {
+		t.Fatal("expected address change to mark target unhealthy")
+	}
+
+	if state.ConsecutiveFailures != 0 {
+		t.Fatalf("expected failures reset, got %d", state.ConsecutiveFailures)
+	}
+
+	if !state.LastChecked.IsZero() {
+		t.Fatal("expected last checked reset")
+	}
+}
+
+func TestUpdateWeightPreservesState(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001", Weight: 1})
+	_ = pool.SetHealthy("api_1", true)
+	_ = pool.RecordFailure("api_1")
+
+	before, _ := pool.GetState("api_1")
+
+	_ = pool.Update(&Target{ID: "api_1", Address: "localhost:9001", Weight: 2})
+
+	after, _ := pool.GetState("api_1")
+	if !after.Healthy {
+		t.Fatal("expected health to be preserved")
+	}
+
+	if after.ConsecutiveFailures != before.ConsecutiveFailures {
+		t.Fatal("expected failures to be preserved")
+	}
+
+	if !after.LastChecked.Equal(before.LastChecked) {
+		t.Fatal("expected last checked to be preserved")
+	}
+}
+
+func TestSetHealthyForAddressRejectsMismatch(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001", Weight: 1})
+
+	if pool.SetHealthyForAddress("api_1", "localhost:9002", true) {
+		t.Fatal("expected address mismatch to be rejected")
+	}
+
+	state, _ := pool.GetState("api_1")
+	if state.Healthy {
+		t.Fatal("expected health unchanged")
+	}
+
+	if !pool.SetHealthyForAddress("api_1", "localhost:9001", true) {
+		t.Fatal("expected matching address to be accepted")
+	}
+}
+
+func TestReorder(t *testing.T) {
+	pool := NewPool()
+	_ = pool.Add(&Target{ID: "api_1", Address: "localhost:9001", Weight: 1})
+	_ = pool.Add(&Target{ID: "api_2", Address: "localhost:9002", Weight: 1})
+
+	pool.Reorder([]string{"api_2", "missing", "api_1"})
+
+	list := pool.List()
+	if len(list) != 2 || list[0].ID != "api_2" || list[1].ID != "api_1" {
+		t.Fatalf("unexpected order: %v", list)
+	}
+}

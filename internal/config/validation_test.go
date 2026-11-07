@@ -259,3 +259,42 @@ func TestValidate(t *testing.T) {
 	}
 
 }
+
+func TestValidateTargetAddresses(t *testing.T) {
+	tests := []struct {
+		address string
+		wantErr bool
+	}{
+		{"localhost:9001", false},
+		{"127.0.0.1:9001", false},
+		{"[::1]:9001", false},
+		{"localhost", true},
+		{"localhost:", true},
+		{":9001", true},
+		{"::1:9001", true},
+		{"localhost:http", true},
+		{"localhost:99999", true},
+		{"localhost:9001/path", true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.address, func(t *testing.T) {
+			cfg := Config{
+				Server:   ServerConfig{Address: ":42069"},
+				Strategy: StrategyConfig{Type: "round_robin"},
+				Targets: []TargetConfig{
+					{ID: "api_1", Address: test.address},
+				},
+			}
+
+			err := cfg.Validate()
+			if test.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			if !test.wantErr && err != nil {
+				t.Fatalf("expected nil, got %v", err)
+			}
+		})
+	}
+}

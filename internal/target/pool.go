@@ -76,9 +76,16 @@ func (pool *Pool) Update(t *Target) error {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	_, ok := pool.targets[t.ID]
+	existing, ok := pool.targets[t.ID]
 	if !ok {
 		return errors.New("target not found")
+	}
+
+	if existing.Address != t.Address {
+		state := pool.states[t.ID]
+		state.Healthy = false
+		state.ConsecutiveFailures = 0
+		state.LastChecked = time.Time{}
 	}
 
 	pool.targets[t.ID] = *t
@@ -137,6 +144,54 @@ func (pool *Pool) SetHealthy(ID string, healthy bool) error {
 		state.ConsecutiveFailures = 0
 	}
 	return nil
+}
+
+func (pool *Pool) SetHealthyForAddress(ID string, address string, healthy bool) bool {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	target, ok := pool.targets[ID]
+	if !ok || target.Address != address {
+		return false
+	}
+
+	state := pool.states[ID]
+	state.Healthy = healthy
+	state.LastChecked = time.Now()
+	if healthy {
+		state.ConsecutiveFailures = 0
+	}
+
+	return true
+}
+
+func (pool *Pool) Reorder(ids []string) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	seen := make(map[string]struct{}, len(ids))
+	order := make([]string, 0, len(pool.order))
+
+	for _, id := range ids {
+		if _, ok := pool.targets[id]; !ok {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		order = append(order, id)
+	}
+
+	for _, id := range pool.order {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		order = append(order, id)
+	}
+
+	pool.order = order
 }
 
 func (pool *Pool) HealthyCount() int {
