@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 )
 
 func main() {
@@ -20,11 +22,40 @@ func main() {
 		"backend identifier",
 	)
 
+	quiet := flag.Bool(
+		"quiet",
+		false,
+		"disable request logging",
+	)
+
+	delay := flag.Duration(
+		"delay",
+		0,
+		"delay before each response",
+	)
+
+	bodySize := flag.Int(
+		"body-size",
+		0,
+		"pad response body to this many bytes",
+	)
+
 	flag.Parse()
 
+	body := fmt.Sprintf("Hello from %s\n", *id)
+	if *bodySize > len(body) {
+		body += strings.Repeat("x", *bodySize-len(body))
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[%s] %s %s", *id, r.Method, r.URL.Path)
-		fmt.Fprintf(w, "Hello from %s\n", *id)
+		if !*quiet {
+			log.Printf("[%s] %s %s", *id, r.Method, r.URL.Path)
+		}
+		if *delay > 0 {
+			time.Sleep(*delay)
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprint(w, body)
 	})
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

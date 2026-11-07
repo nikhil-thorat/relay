@@ -6,3 +6,12 @@ coverage.out
 
 # Environment files
 .env
+
+# Raw benchmark output
+bench/results/latest/raw/
+bench/results/latest/*.log
+
+# Python cache
+__pycache__/
+*.pyc
+bench/results/latest/manifest.csv

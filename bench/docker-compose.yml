@@ -1,0 +1,88 @@
+name: relay-bench
+
+x-no-logging: &no-logging
+  driver: none
+
+x-ulimits: &ulimits
+  nofile:
+    soft: 65535
+    hard: 65535
+
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: bench/backend.Dockerfile
+  image: relay-bench-backend:local
+  cpuset: "4-7"
+  environment:
+    GOMAXPROCS: "4"
+  ulimits: *ulimits
+  logging: *no-logging
+  restart: "no"
+
+services:
+  api_1:
+    <<: *backend
+    command: ["-port", "9001", "-id", "api_1", "-quiet", "-body-size", "1024", "-delay", "${API1_DELAY:-0ms}"]
+    expose:
+      - "9001"
+
+  api_2:
+    <<: *backend
+    command: ["-port", "9002", "-id", "api_2", "-quiet", "-body-size", "1024"]
+    expose:
+      - "9002"
+
+  api_3:
+    <<: *backend
+    command: ["-port", "9003", "-id", "api_3", "-quiet", "-body-size", "1024"]
+    expose:
+      - "9003"
+
+  relay:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: relay-bench-relay:local
+    command: ["-config", "${RELAY_CONFIG:-/configs/rr.yml}"]
+    cpuset: "0-3"
+    environment:
+      GOMAXPROCS: "4"
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - ./configs:/configs:ro,z
+    ulimits: *ulimits
+    logging: *no-logging
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/readyz"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    depends_on:
+      - api_1
+      - api_2
+      - api_3
+
+  k6:
+    image: grafana/k6@sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e
+    profiles: ["load"]
+    cpuset: "8-11"
+    user: "0:0"
+    environment:
+      GOMAXPROCS: "4"
+    volumes:
+      - ./k6:/scripts:ro,z
+      - ./results:/results:z
+    ulimits: *ulimits
+    logging: *no-logging
+    restart: "no"
+    depends_on:
+      relay:
+        condition: service_healthy
+
+networks:
+  default:
+    name: relay-bench-net

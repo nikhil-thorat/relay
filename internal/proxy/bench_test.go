@@ -31,6 +31,9 @@ func BenchmarkProxy(b *testing.B) {
 	logger, _ := logging.New("off", "text")
 	p := New(bal, m, logger, 0)
 
+	b.ReportAllocs()
+	b.ResetTimer()
+
 	for b.Loop() {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()

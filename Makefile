@@ -1,5 +1,7 @@
 .SILENT:
 
+.PHONY: bench bench-smoke bench-micro
+
 BINARY=relay
 CMD=./cmd/relay
 
@@ -14,6 +16,15 @@ test:
 
 test-race:
 	go test -race ./...
+
+bench:
+	./bench/run.sh all
+
+bench-smoke:
+	./bench/run.sh smoke
+
+bench-micro:
+	go test -run '^$$' -bench . -benchmem -count=5 ./internal/balancer ./internal/proxy
 
 fmt:
 	go fmt ./...
